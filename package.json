@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:setup": "node scripts/db-setup.js"
   },
   "dependencies": {
     "@libsql/client": "^0.15.15",
@@ -25,6 +26,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.0.10",
+    "dotenv": "^16.4.5",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
