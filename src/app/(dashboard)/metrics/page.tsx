@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { getUsuarioActual } from '@/app/actions/tickets'
+import Link from 'next/link'
 
 interface Metrics {
     database: {
@@ -38,6 +40,22 @@ export default function MetricsPage() {
     const [error, setError] = useState<string | null>(null)
     const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
     const [clearingCache, setClearingCache] = useState(false)
+    const [accessDenied, setAccessDenied] = useState(false)
+
+    const checkAccess = async () => {
+        const result = await getUsuarioActual()
+        if ('usuario' in result && result.usuario) {
+            if (result.usuario.rol !== 'admin') {
+                setAccessDenied(true)
+                setIsLoading(false)
+                return false
+            }
+            return true
+        }
+        setAccessDenied(true)
+        setIsLoading(false)
+        return false
+    }
 
     const fetchMetrics = async () => {
         try {
@@ -69,9 +87,15 @@ export default function MetricsPage() {
     }
 
     useEffect(() => {
-        fetchMetrics()
-        const interval = setInterval(fetchMetrics, 30000) // Actualizar cada 30 segundos
-        return () => clearInterval(interval)
+        const init = async () => {
+            const hasAccess = await checkAccess()
+            if (hasAccess) {
+                fetchMetrics()
+                const interval = setInterval(fetchMetrics, 30000)
+                return () => clearInterval(interval)
+            }
+        }
+        init()
     }, [])
 
     const formatBytes = (bytes: number) => {
@@ -86,6 +110,26 @@ export default function MetricsPage() {
         const hours = Math.floor(seconds / 3600)
         const minutes = Math.floor((seconds % 3600) / 60)
         return `${hours}h ${minutes}m`
+    }
+
+    if (accessDenied) {
+        return (
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+                <div className="text-center bg-white rounded-lg shadow-lg p-8">
+                    <div className="text-6xl mb-4">🔒</div>
+                    <h1 className="text-2xl font-bold text-gray-900 mb-2">Acceso Restringido</h1>
+                    <p className="text-gray-600 mb-6">
+                        Solo los administradores pueden acceder a las métricas del sistema.
+                    </p>
+                    <Link
+                        href="/tickets"
+                        className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 inline-block"
+                    >
+                        Volver a Tickets
+                    </Link>
+                </div>
+            </div>
+        )
     }
 
     if (isLoading) {

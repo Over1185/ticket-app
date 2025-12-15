@@ -70,12 +70,14 @@ export function Navbar() {
                             >
                                 Tickets
                             </Link>
-                            <Link
-                                href="/metrics"
-                                className="text-gray-600 hover:text-blue-600 px-3 py-2 text-sm font-medium transition-colors"
-                            >
-                                Métricas
-                            </Link>
+                            {user?.rol === 'admin' && (
+                                <Link
+                                    href="/metrics"
+                                    className="text-gray-600 hover:text-blue-600 px-3 py-2 text-sm font-medium transition-colors"
+                                >
+                                    Métricas
+                                </Link>
+                            )}
                         </div>
                     </div>
                     <div className="flex items-center">

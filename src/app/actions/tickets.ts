@@ -2,7 +2,8 @@
 
 import { z } from 'zod'
 import { revalidatePath } from 'next/cache'
-import { validateEstadoTicket, validatePrioridad } from '@/lib/auth/permissions'
+import { validateEstadoTicket, validatePrioridad, hasPermission, Role } from '@/lib/auth/permissions'
+import { getSession } from '@/lib/auth/session'
 import * as queries from '@/lib/db/queries'
 import { invalidateTicketCache, getCachedTicket, cacheTicket } from '@/lib/redis/cache'
 import { enqueueTask } from '@/lib/redis/queue'
@@ -37,6 +38,31 @@ const CrearInteraccionSchema = z.object({
     contenido: z.string().min(1, 'El contenido no puede estar vacío'),
     esInterno: z.boolean().optional(),
 })
+
+/**
+ * Obtiene la información del usuario actual de la sesión
+ * Usado para verificar permisos en componentes cliente
+ */
+export async function getUsuarioActual() {
+    try {
+        const session = await getSession()
+        if (!session) {
+            return { error: 'No autorizado' }
+        }
+        return {
+            success: true,
+            usuario: {
+                id: session.id,
+                nombre: session.nombre,
+                email: session.email,
+                rol: session.rol,
+            },
+        }
+    } catch (error) {
+        console.error('Error getting current user:', error)
+        return { error: 'Error al obtener el usuario' }
+    }
+}
 
 /**
  * Crea un nuevo ticket
@@ -78,23 +104,33 @@ export async function crearTicket(datos: unknown) {
 
 /**
  * Obtiene los detalles de un ticket
+ * Verifica que el cliente solo pueda ver sus propios tickets
  */
 export async function obtenerTicket(ticketId: number) {
     try {
+        const session = await getSession()
+        if (!session) {
+            return { error: 'No autorizado' }
+        }
+
         // Intentar obtener del caché
         const cached = await getCachedTicket(ticketId)
-        if (cached) {
-            return { success: true, ticket: serialize(cached) }
-        }
+        let ticket = cached
 
-        // Si no está en caché, obtener de la BD
-        const ticket = await queries.obtenerTicket(ticketId)
         if (!ticket) {
-            return { error: 'Ticket no encontrado' }
+            // Si no está en caché, obtener de la BD
+            ticket = await queries.obtenerTicket(ticketId)
+            if (!ticket) {
+                return { error: 'Ticket no encontrado' }
+            }
+            // Cachear para próxima vez
+            await cacheTicket(ticketId, ticket)
         }
 
-        // Cachear para próxima vez
-        await cacheTicket(ticketId, ticket)
+        // Verificar que el cliente solo pueda ver sus propios tickets
+        if (session.rol === 'cliente' && ticket.usuario_id !== session.id) {
+            return { error: 'No tienes acceso a este ticket' }
+        }
 
         return { success: true, ticket: serialize(ticket) }
     } catch (error) {
@@ -135,6 +171,7 @@ export async function actualizarTicket(datos: unknown) {
 /**
  * Actualiza el estado del ticket y crea una interacción en una transacción
  * Garantiza consistencia: o ambas operaciones se ejecutan o ninguna
+ * Solo operadores y administradores pueden cambiar el estado
  */
 export async function actualizarTicketConInteraccion(
     ticketId: number,
@@ -143,12 +180,22 @@ export async function actualizarTicketConInteraccion(
     comentario?: string
 ) {
     try {
+        // Verificar permisos - solo operador y admin pueden cambiar estado
+        const session = await getSession()
+        if (!session) {
+            return { error: 'No autorizado' }
+        }
+
+        if (!hasPermission(session.rol as Role, 'tickets.update')) {
+            return { error: 'No tienes permisos para cambiar el estado del ticket' }
+        }
+
         const estadoValidado = validateEstadoTicket(nuevoEstado)
 
         const resultado = await queries.actualizarTicketConInteraccion(
             ticketId,
             estadoValidado,
-            usuarioId,
+            session.id, // Usar el ID de la sesión en lugar del parámetro
             comentario
         )
 
@@ -254,6 +301,7 @@ export async function listarTicketosDelUsuario(usuarioId: number) {
 
 /**
  * Lista todos los tickets (con filtros opcionales)
+ * Aplica filtros según el rol del usuario
  */
 export async function listarTickets(filtros?: {
     estado?: string
@@ -262,6 +310,11 @@ export async function listarTickets(filtros?: {
     prioridad?: string
 }) {
     try {
+        const session = await getSession()
+        if (!session) {
+            return { error: 'No autorizado' }
+        }
+
         const filtrosValidados: any = {}
 
         if (filtros?.estado) {
@@ -270,11 +323,15 @@ export async function listarTickets(filtros?: {
         if (filtros?.prioridad) {
             filtrosValidados.prioridad = validatePrioridad(filtros.prioridad)
         }
-        if (filtros?.usuarioId) {
-            filtrosValidados.usuarioId = filtros.usuarioId
-        }
         if (filtros?.asignadoA) {
             filtrosValidados.asignadoA = filtros.asignadoA
+        }
+
+        // Cliente solo puede ver sus propios tickets
+        if (session.rol === 'cliente') {
+            filtrosValidados.usuarioId = session.id
+        } else if (filtros?.usuarioId) {
+            filtrosValidados.usuarioId = filtros.usuarioId
         }
 
         const tickets = await queries.listarTickets(filtrosValidados)

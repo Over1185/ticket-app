@@ -193,7 +193,7 @@ export async function listarTickets(filtros?: {
         values.push(filtros.prioridad)
     }
 
-    sql += ' ORDER BY fecha_actualizacion DESC'
+    sql += ' ORDER BY id DESC'
     return await query<Ticket>(sql, values)
 }
 
@@ -201,7 +201,7 @@ export async function listarTicketsDelUsuario(usuarioId: number): Promise<Ticket
     return await query<Ticket>(
         `SELECT * FROM tickets 
      WHERE usuario_id = ? 
-     ORDER BY fecha_actualizacion DESC`,
+     ORDER BY id DESC`,
         [usuarioId]
     )
 }

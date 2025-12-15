@@ -3,12 +3,20 @@
 import { useState, useEffect } from 'react'
 import { Ticket, Interaccion } from '@/lib/db/queries'
 import { InteractionTimeline } from '@/components/interaction-timeline'
-import { obtenerTicket, listarInteracciones, actualizarTicketConInteraccion } from '@/app/actions/tickets'
-import { useParams } from 'next/navigation'
+import { obtenerTicket, listarInteracciones, actualizarTicketConInteraccion, getUsuarioActual } from '@/app/actions/tickets'
+import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
+
+interface Usuario {
+    id: number
+    nombre: string
+    email: string
+    rol: 'cliente' | 'operador' | 'admin'
+}
 
 export default function TicketDetailPage() {
     const params = useParams()
+    const router = useRouter()
     const ticketId = parseInt(params.id as string)
     const [ticket, setTicket] = useState<Ticket | null>(null)
     const [interacciones, setInteracciones] = useState<Interaccion[]>([])
@@ -16,11 +24,28 @@ export default function TicketDetailPage() {
     const [nuevoEstado, setNuevoEstado] = useState('')
     const [comentario, setComentario] = useState('')
     const [isUpdating, setIsUpdating] = useState(false)
+    const [usuario, setUsuario] = useState<Usuario | null>(null)
+    const [accessError, setAccessError] = useState<string | null>(null)
+
+    const loadUsuario = async () => {
+        const result = await getUsuarioActual()
+        if ('usuario' in result && result.usuario) {
+            setUsuario(result.usuario)
+            return result.usuario
+        }
+        return null
+    }
 
     const loadTicketData = async () => {
         setIsLoading(true)
         try {
             const ticketResult = await obtenerTicket(ticketId)
+
+            if ('error' in ticketResult) {
+                setAccessError(ticketResult.error || 'Error desconocido')
+                return
+            }
+
             const interaccionesResult = await listarInteracciones(ticketId)
 
             if ('ticket' in ticketResult && ticketResult.ticket) {
@@ -39,24 +64,30 @@ export default function TicketDetailPage() {
     }
 
     useEffect(() => {
-        loadTicketData()
+        const init = async () => {
+            await loadUsuario()
+            await loadTicketData()
+        }
+        init()
     }, [ticketId])
 
     const handleEstadoChange = async () => {
-        if (!ticket || nuevoEstado === ticket.estado) return
+        if (!ticket || nuevoEstado === ticket.estado || !usuario) return
 
         setIsUpdating(true)
         try {
             const result = await actualizarTicketConInteraccion(
                 ticketId,
                 nuevoEstado,
-                1, // usuarioId placeholder
+                usuario.id,
                 comentario || undefined
             )
 
             if ('resultado' in result) {
                 await loadTicketData()
                 setComentario('')
+            } else if ('error' in result) {
+                alert(result.error)
             }
         } catch (error) {
             console.error('Error updating ticket:', error)
@@ -65,10 +96,26 @@ export default function TicketDetailPage() {
         }
     }
 
+    // Verificar si el usuario puede cambiar el estado (operador o admin)
+    const canChangeStatus = usuario && (usuario.rol === 'operador' || usuario.rol === 'admin')
+
     if (isLoading) {
         return (
             <div className="flex justify-center items-center min-h-screen">
                 <p className="text-gray-600">Cargando...</p>
+            </div>
+        )
+    }
+
+    if (accessError) {
+        return (
+            <div className="flex justify-center items-center min-h-screen">
+                <div className="text-center">
+                    <p className="text-red-600 mb-4">{accessError}</p>
+                    <Link href="/tickets" className="text-blue-600 hover:text-blue-800">
+                        Volver a la lista
+                    </Link>
+                </div>
             </div>
         )
     }
@@ -198,8 +245,8 @@ export default function TicketDetailPage() {
                     </div>
                 </div>
 
-                {/* Cambiar Estado */}
-                {ticket.estado !== 'cerrado' && (
+                {/* Cambiar Estado - Solo visible para operadores y admins */}
+                {ticket.estado !== 'cerrado' && canChangeStatus && (
                     <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
                         <h3 className="text-xl font-bold mb-4">Cambiar Estado</h3>
                         <div className="space-y-4">
@@ -237,7 +284,7 @@ export default function TicketDetailPage() {
                 <div className="bg-white rounded-lg shadow-sm p-6">
                     <InteractionTimeline
                         ticketId={ticketId}
-                        usuarioId={1} // placeholder
+                        usuarioId={usuario?.id || 0}
                         interacciones={interacciones}
                         onInteractionCreated={loadTicketData}
                     />

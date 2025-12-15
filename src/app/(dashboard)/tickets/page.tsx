@@ -4,17 +4,32 @@ import { useState, useEffect } from 'react'
 import { TicketList } from '@/components/ticket-list'
 import { TicketForm } from '@/components/ticket-form'
 import { Ticket } from '@/lib/db/queries'
-import { listarTickets } from '@/app/actions/tickets'
+import { listarTickets, getUsuarioActual } from '@/app/actions/tickets'
 import Link from 'next/link'
+
+interface Usuario {
+    id: number
+    nombre: string
+    email: string
+    rol: 'cliente' | 'operador' | 'admin'
+}
 
 export default function TicketsPage() {
     const [tickets, setTickets] = useState<Ticket[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [showForm, setShowForm] = useState(false)
+    const [usuario, setUsuario] = useState<Usuario | null>(null)
     const [filtros, setFiltros] = useState({
         estado: '',
         prioridad: '',
     })
+
+    const loadUsuario = async () => {
+        const result = await getUsuarioActual()
+        if ('usuario' in result && result.usuario) {
+            setUsuario(result.usuario)
+        }
+    }
 
     const loadTickets = async () => {
         setIsLoading(true)
@@ -35,8 +50,14 @@ export default function TicketsPage() {
     }
 
     useEffect(() => {
-        loadTickets()
-    }, [filtros])
+        loadUsuario()
+    }, [])
+
+    useEffect(() => {
+        if (usuario) {
+            loadTickets()
+        }
+    }, [filtros, usuario])
 
     const handleTicketCreated = () => {
         setShowForm(false)
@@ -75,9 +96,9 @@ export default function TicketsPage() {
                 </div>
 
                 {/* Formulario de nuevo ticket */}
-                {showForm && (
+                {showForm && usuario && (
                     <div className="mb-8 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                        <TicketForm usuarioId={1} onSuccess={handleTicketCreated} />
+                        <TicketForm usuarioId={usuario.id} onSuccess={handleTicketCreated} />
                     </div>
                 )}
 
