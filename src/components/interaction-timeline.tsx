@@ -52,12 +52,48 @@ export function InteractionTimeline({
 
     const getTypeLabel = (tipo: string): string => {
         const labels: Record<string, string> = {
-            comentario: 'Comentario',
-            cambio_estado: 'Cambio de Estado',
-            asignacion: 'Asignación',
-            cierre: 'Cierre de Ticket',
+            comentario: '💬 Comentario',
+            cambio_estado: '🔄 Cambio de Estado',
+            asignacion: '👤 Asignación',
+            cierre: '✅ Cierre de Ticket',
         }
         return labels[tipo] || tipo
+    }
+
+    const formatMetadata = (metadata: string, tipo: string): string | null => {
+        try {
+            const data = JSON.parse(metadata)
+
+            // Para cambios de estado, mostrar un texto legible
+            if (tipo === 'cambio_estado') {
+                if (data.estado_anterior && data.estado_nuevo) {
+                    const formatEstado = (estado: string): string => {
+                        const estados: Record<string, string> = {
+                            abierto: 'Abierto',
+                            en_progreso: 'En Progreso',
+                            resuelto: 'Resuelto',
+                            cerrado: 'Cerrado',
+                        }
+                        return estados[estado] || estado
+                    }
+                    return `Estado cambiado de "${formatEstado(data.estado_anterior)}" a "${formatEstado(data.estado_nuevo)}"`
+                }
+                // Si solo tiene razón, no mostrar nada (el contenido ya tiene la info)
+                if (data.razon) {
+                    return null
+                }
+            }
+
+            // Para asignaciones
+            if (tipo === 'asignacion' && data.operador_id) {
+                return `Asignado al operador #${data.operador_id}`
+            }
+
+            // Para otros casos, no mostrar el JSON crudo
+            return null
+        } catch {
+            return null
+        }
     }
 
     const getTypeColor = (tipo: string): string => {
@@ -109,10 +145,10 @@ export function InteractionTimeline({
                                 <p className="mt-3 text-gray-700 whitespace-pre-wrap">{interaccion.contenido}</p>
                             )}
 
-                            {interaccion.metadata && (
-                                <div className="mt-3 p-3 bg-gray-100 rounded text-xs font-mono text-gray-600 max-h-20 overflow-y-auto">
-                                    {JSON.stringify(JSON.parse(interaccion.metadata), null, 2)}
-                                </div>
+                            {interaccion.metadata && formatMetadata(interaccion.metadata, interaccion.tipo) && (
+                                <p className="mt-2 text-sm text-gray-600 italic">
+                                    {formatMetadata(interaccion.metadata, interaccion.tipo)}
+                                </p>
                             )}
                         </div>
                     ))

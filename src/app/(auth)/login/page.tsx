@@ -40,10 +40,10 @@ export default function LoginPage() {
                     setMessage({ type: 'error', text: result.error })
                 } else {
                     setMessage({ type: 'success', text: 'Sesión iniciada correctamente' })
-                    // Aquí normalmente guardarías el usuario en una cookie o contexto
                     setTimeout(() => {
                         router.push('/tickets')
-                    }, 1000)
+                        router.refresh()
+                    }, 500)
                 }
             } else {
                 const result = await crearUsuario({

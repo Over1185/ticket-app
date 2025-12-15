@@ -270,6 +270,13 @@ export async function actualizarTicketConInteraccion(
     metadata?: Record<string, any>
 ): Promise<{ ticketId: number; interaccionId: number }> {
     return await transaction(async (client) => {
+        // Obtener estado anterior
+        const ticketActual = await queryOne<{ estado: string }>(
+            'SELECT estado FROM tickets WHERE id = ?',
+            [ticketId]
+        )
+        const estadoAnterior = ticketActual?.estado || 'desconocido'
+
         // Actualizar ticket
         await execute(
             `UPDATE tickets 
@@ -277,6 +284,13 @@ export async function actualizarTicketConInteraccion(
        WHERE id = ?`,
             [nuevoEstado, ticketId]
         )
+
+        // Combinar metadata con información del cambio de estado
+        const metadataCompleto = {
+            ...metadata,
+            estado_anterior: estadoAnterior,
+            estado_nuevo: nuevoEstado,
+        }
 
         // Registrar interacción
         const interaccionResult = await execute(
@@ -286,7 +300,7 @@ export async function actualizarTicketConInteraccion(
                 ticketId,
                 usuarioId,
                 comentario || null,
-                metadata ? JSON.stringify(metadata) : null,
+                JSON.stringify(metadataCompleto),
             ]
         )
 

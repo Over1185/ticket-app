@@ -9,6 +9,26 @@ interface TicketListProps {
 }
 
 export function TicketList({ tickets }: TicketListProps) {
+    const formatEstado = (estado: string): string => {
+        const estados: Record<string, string> = {
+            abierto: 'Abierto',
+            en_progreso: 'En Progreso',
+            resuelto: 'Resuelto',
+            cerrado: 'Cerrado',
+        }
+        return estados[estado] || estado
+    }
+
+    const formatPrioridad = (prioridad: string): string => {
+        const prioridades: Record<string, string> = {
+            baja: 'Baja',
+            media: 'Media',
+            alta: 'Alta',
+            critica: 'Crítica',
+        }
+        return prioridades[prioridad] || prioridad
+    }
+
     const getPriorityColor = (prioridad: string) => {
         switch (prioridad) {
             case 'critica':
@@ -70,12 +90,12 @@ export function TicketList({ tickets }: TicketListProps) {
                                     </td>
                                     <td className="px-4 py-3">
                                         <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(ticket.estado)}`}>
-                                            {ticket.estado}
+                                            {formatEstado(ticket.estado)}
                                         </span>
                                     </td>
                                     <td className="px-4 py-3">
                                         <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${getPriorityColor(ticket.prioridad)}`}>
-                                            {ticket.prioridad}
+                                            {formatPrioridad(ticket.prioridad)}
                                         </span>
                                     </td>
                                     <td className="px-4 py-3 text-sm text-gray-500">

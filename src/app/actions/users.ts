@@ -1,10 +1,17 @@
 'use server'
 
 import { z } from 'zod'
-import { hashPassword, verifyPassword } from '@/lib/auth/session'
+import { hashPassword, verifyPassword, createSession, getSession, destroySession, SessionUser } from '@/lib/auth/session'
 import { validateRole, validatePrioridad, validateEstadoTicket } from '@/lib/auth/permissions'
 import * as queries from '@/lib/db/queries'
 import { cacheUser, invalidateUserCache, getCachedUser } from '@/lib/redis/cache'
+
+/**
+ * Serializa un objeto para que sea compatible con Client Components
+ */
+function serialize<T>(data: T): T {
+    return JSON.parse(JSON.stringify(data))
+}
 
 // Esquemas de validación
 const CrearUsuarioSchema = z.object({
@@ -83,17 +90,21 @@ export async function loginUsuario(datos: unknown) {
             return { error: 'Email o contraseña inválidos' }
         }
 
+        // Crear sesión del usuario
+        const sessionUser: SessionUser = {
+            id: usuario.id,
+            email: usuario.email,
+            nombre: usuario.nombre,
+            rol: usuario.rol as 'cliente' | 'operador' | 'admin',
+        }
+        await createSession(sessionUser)
+
         // Cachear usuario
         await cacheUser(usuario.id, usuario)
 
         return {
             success: true,
-            usuario: {
-                id: usuario.id,
-                email: usuario.email,
-                nombre: usuario.nombre,
-                rol: usuario.rol,
-            },
+            usuario: sessionUser,
         }
     } catch (error) {
         console.error('Error logging in:', error)
@@ -105,6 +116,21 @@ export async function loginUsuario(datos: unknown) {
 }
 
 /**
+ * Obtiene la sesión del usuario actual
+ */
+export async function getCurrentUser(): Promise<SessionUser | null> {
+    return await getSession()
+}
+
+/**
+ * Cierra la sesión del usuario
+ */
+export async function logoutUsuario() {
+    await destroySession()
+    return { success: true, mensaje: 'Sesión cerrada exitosamente' }
+}
+
+/**
  * Obtiene los datos de un usuario
  */
 export async function obtenerUsuario(usuarioId: number) {
@@ -112,7 +138,7 @@ export async function obtenerUsuario(usuarioId: number) {
         // Intentar obtener del caché primero
         const cached = await getCachedUser(usuarioId)
         if (cached) {
-            return { success: true, usuario: cached }
+            return { success: true, usuario: serialize(cached) }
         }
 
         // Si no está en caché, obtener de la BD
@@ -124,7 +150,7 @@ export async function obtenerUsuario(usuarioId: number) {
         // Cachear para próxima vez
         await cacheUser(usuarioId, usuario)
 
-        return { success: true, usuario }
+        return { success: true, usuario: serialize(usuario) }
     } catch (error) {
         console.error('Error fetching user:', error)
         return { error: 'Error al obtener el usuario' }
@@ -167,7 +193,7 @@ export async function actualizarUsuario(usuarioId: number, datos: unknown) {
 export async function listarUsuarios() {
     try {
         const usuarios = await queries.listarUsuarios()
-        return { success: true, usuarios }
+        return { success: true, usuarios: serialize(usuarios) }
     } catch (error) {
         console.error('Error listing users:', error)
         return { error: 'Error al listar usuarios' }

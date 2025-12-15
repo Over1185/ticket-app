@@ -6,6 +6,14 @@ import * as queries from '@/lib/db/queries'
 import { invalidateTicketCache, getCachedTicket, cacheTicket } from '@/lib/redis/cache'
 import { enqueueTask } from '@/lib/redis/queue'
 
+/**
+ * Serializa un objeto para que sea compatible con Client Components
+ * Esto convierte objetos de la base de datos en objetos planos
+ */
+function serialize<T>(data: T): T {
+    return JSON.parse(JSON.stringify(data))
+}
+
 // Esquemas de validación
 const CrearTicketSchema = z.object({
     titulo: z.string().min(5, 'El título debe tener al menos 5 caracteres'),
@@ -75,7 +83,7 @@ export async function obtenerTicket(ticketId: number) {
         // Intentar obtener del caché
         const cached = await getCachedTicket(ticketId)
         if (cached) {
-            return { success: true, ticket: cached }
+            return { success: true, ticket: serialize(cached) }
         }
 
         // Si no está en caché, obtener de la BD
@@ -87,7 +95,7 @@ export async function obtenerTicket(ticketId: number) {
         // Cachear para próxima vez
         await cacheTicket(ticketId, ticket)
 
-        return { success: true, ticket }
+        return { success: true, ticket: serialize(ticket) }
     } catch (error) {
         console.error('Error fetching ticket:', error)
         return { error: 'Error al obtener el ticket' }
@@ -140,8 +148,7 @@ export async function actualizarTicketConInteraccion(
             ticketId,
             estadoValidado,
             usuarioId,
-            comentario,
-            { razon: 'actualización de estado desde UI' }
+            comentario
         )
 
         // Invalidar caché
@@ -225,7 +232,7 @@ export async function cerrarTicket(
 export async function listarTicketosDelUsuario(usuarioId: number) {
     try {
         const tickets = await queries.listarTicketsDelUsuario(usuarioId)
-        return { success: true, tickets }
+        return { success: true, tickets: serialize(tickets) }
     } catch (error) {
         console.error('Error listing user tickets:', error)
         return { error: 'Error al listar los tickets' }
@@ -258,7 +265,7 @@ export async function listarTickets(filtros?: {
         }
 
         const tickets = await queries.listarTickets(filtrosValidados)
-        return { success: true, tickets }
+        return { success: true, tickets: serialize(tickets) }
     } catch (error) {
         console.error('Error listing tickets:', error)
         if (error instanceof z.ZodError) {
@@ -308,7 +315,7 @@ export async function crearInteraccion(datos: unknown) {
 export async function listarInteracciones(ticketId: number) {
     try {
         const interacciones = await queries.listarInteraccionesDelTicket(ticketId)
-        return { success: true, interacciones }
+        return { success: true, interacciones: serialize(interacciones) }
     } catch (error) {
         console.error('Error listing interactions:', error)
         return { error: 'Error al listar las interacciones' }
@@ -321,7 +328,7 @@ export async function listarInteracciones(ticketId: number) {
 export async function listarInteraccionesPublicas(ticketId: number) {
     try {
         const interacciones = await queries.listarInteraccionesPublicas(ticketId)
-        return { success: true, interacciones }
+        return { success: true, interacciones: serialize(interacciones) }
     } catch (error) {
         console.error('Error listing public interactions:', error)
         return { error: 'Error al listar las interacciones' }

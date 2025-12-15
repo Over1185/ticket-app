@@ -86,6 +86,26 @@ export default function TicketDetailPage() {
         )
     }
 
+    const formatEstado = (estado: string): string => {
+        const estados: Record<string, string> = {
+            abierto: 'Abierto',
+            en_progreso: 'En Progreso',
+            resuelto: 'Resuelto',
+            cerrado: 'Cerrado',
+        }
+        return estados[estado] || estado
+    }
+
+    const formatPrioridad = (prioridad: string): string => {
+        const prioridades: Record<string, string> = {
+            baja: 'Baja',
+            media: 'Media',
+            alta: 'Alta',
+            critica: 'Crítica',
+        }
+        return prioridades[prioridad] || prioridad
+    }
+
     const getPriorityColor = (prioridad: string) => {
         switch (prioridad) {
             case 'critica':
@@ -136,14 +156,14 @@ export default function TicketDetailPage() {
                                     ticket.estado
                                 )}`}
                             >
-                                {ticket.estado}
+                                {formatEstado(ticket.estado)}
                             </span>
                             <span
                                 className={`block px-4 py-2 rounded-full text-center font-medium ${getPriorityColor(
                                     ticket.prioridad
                                 )}`}
                             >
-                                {ticket.prioridad}
+                                {formatPrioridad(ticket.prioridad)}
                             </span>
                         </div>
                     </div>
