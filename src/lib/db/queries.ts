@@ -1,176 +1,367 @@
-import { db } from "./client";
+import { query, queryOne, execute, transaction } from './client'
+import { Role, EstadoTicket, Prioridad, TipoInteraccion } from '@/lib/auth/permissions'
 
-export type Usuario = {
-    id: number;
-    email: string;
-    nombre: string;
-    rol: "cliente" | "operador" | "admin";
-    password_hash: string;
-    fecha_creacion: string;
-    activo: number;
-};
+// ===== TIPOS =====
 
-export type Ticket = {
-    id: number;
-    titulo: string;
-    descripcion: string;
-    usuario_id: number;
-    estado: "abierto" | "en_progreso" | "resuelto" | "cerrado";
-    prioridad: "baja" | "media" | "alta" | "critica";
-    categoria: string | null;
-    fecha_creacion: string;
-    fecha_actualizacion: string;
-    fecha_cierre: string | null;
-    asignado_a: number | null;
-};
-
-export type NewTicket = {
-    titulo: string;
-    descripcion: string;
-    usuario_id: number;
-    estado: Ticket["estado"];
-    prioridad: Ticket["prioridad"];
-    categoria?: string | null;
-    asignado_a?: number | null;
-};
-
-export type Interaccion = {
-    id: number;
-    ticket_id: number;
-    usuario_id: number;
-    tipo: "comentario" | "cambio_estado" | "asignacion" | "cierre";
-    contenido: string | null;
-    metadata: string | null;
-    fecha_creacion: string;
-    es_interno: number;
-};
-
-function mapRow<T>(row: any): T {
-    return row as T;
+export interface Usuario {
+    id: number
+    email: string
+    nombre: string
+    rol: Role
+    password_hash: string
+    fecha_creacion: string
+    activo: boolean
 }
 
-export async function getUserByEmail(email: string): Promise<Usuario | null> {
-    const result = await db.execute({
-        sql: "SELECT * FROM usuarios WHERE email = ? AND activo = 1",
-        args: [email],
-    });
-    return result.rows.length ? mapRow<Usuario>(result.rows[0]) : null;
+export interface Ticket {
+    id: number
+    titulo: string
+    descripcion: string
+    usuario_id: number
+    estado: EstadoTicket
+    prioridad: Prioridad
+    categoria: string | null
+    fecha_creacion: string
+    fecha_actualizacion: string
+    fecha_cierre: string | null
+    asignado_a: number | null
 }
 
-export async function getUserById(id: number): Promise<Usuario | null> {
-    const result = await db.execute({ sql: "SELECT * FROM usuarios WHERE id = ?", args: [id] });
-    return result.rows.length ? mapRow<Usuario>(result.rows[0]) : null;
+export interface Interaccion {
+    id: number
+    ticket_id: number
+    usuario_id: number
+    tipo: TipoInteraccion
+    contenido: string | null
+    metadata: string | null
+    fecha_creacion: string
+    es_interno: boolean
 }
 
-export async function listOperators(): Promise<Pick<Usuario, "id" | "nombre">[]> {
-    const result = await db.execute({
-        sql: "SELECT id, nombre FROM usuarios WHERE rol IN ('operador', 'admin') AND activo = 1",
-    });
-    return result.rows.map((row) => ({ id: Number(row.id), nombre: String(row.nombre) }));
+// ===== USUARIOS =====
+
+export async function crearUsuario(
+    email: string,
+    nombre: string,
+    rol: Role,
+    passwordHash: string
+): Promise<number> {
+    const result = await execute(
+        `INSERT INTO usuarios (email, nombre, rol, password_hash, activo)
+     VALUES (?, ?, ?, ?, 1)`,
+        [email, nombre, rol, passwordHash]
+    )
+    return Number(result.lastInsertRowid)
 }
 
-export async function createUser(user: Omit<Usuario, "id" | "fecha_creacion" | "activo"> & { activo?: number }): Promise<number> {
-    const result = await db.execute({
-        sql: `INSERT INTO usuarios (email, nombre, rol, password_hash, activo) VALUES (?, ?, ?, ?, ?)`
-        ,
-        args: [user.email, user.nombre, user.rol, user.password_hash, user.activo ?? 1],
-    });
-    return Number(result.lastInsertRowid);
+export async function obtenerUsuario(id: number): Promise<Usuario | null> {
+    return await queryOne<Usuario>(
+        'SELECT * FROM usuarios WHERE id = ?',
+        [id]
+    )
 }
 
-export async function listTickets(filters?: { estado?: Ticket["estado"]; prioridad?: Ticket["prioridad"]; limit?: number }): Promise<Ticket[]> {
-    const clauses: string[] = [];
-    const args: any[] = [];
+export async function obtenerUsuarioPorEmail(email: string): Promise<Usuario | null> {
+    return await queryOne<Usuario>(
+        'SELECT * FROM usuarios WHERE email = ?',
+        [email]
+    )
+}
 
-    if (filters?.estado) {
-        clauses.push("estado = ?");
-        args.push(filters.estado);
+export async function actualizarUsuario(
+    id: number,
+    nombre?: string,
+    activo?: boolean
+): Promise<boolean> {
+    const updates: string[] = []
+    const values: any[] = []
+
+    if (nombre !== undefined) {
+        updates.push('nombre = ?')
+        values.push(nombre)
     }
-    if (filters?.prioridad) {
-        clauses.push("prioridad = ?");
-        args.push(filters.prioridad);
+    if (activo !== undefined) {
+        updates.push('activo = ?')
+        values.push(activo ? 1 : 0)
     }
 
-    const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
-    const limit = filters?.limit ?? 50;
+    if (updates.length === 0) return false
 
-    const result = await db.execute({
-        sql: `SELECT * FROM tickets ${where} ORDER BY fecha_creacion DESC LIMIT ?`,
-        args: [...args, limit],
-    });
-
-    return result.rows.map((row) => mapRow<Ticket>(row));
+    values.push(id)
+    await execute(
+        `UPDATE usuarios SET ${updates.join(', ')} WHERE id = ?`,
+        values
+    )
+    return true
 }
 
-export async function getTicketById(id: number): Promise<Ticket | null> {
-    const result = await db.execute({ sql: "SELECT * FROM tickets WHERE id = ?", args: [id] });
-    return result.rows.length ? mapRow<Ticket>(result.rows[0]) : null;
+export async function listarUsuarios(): Promise<Usuario[]> {
+    return await query<Usuario>(
+        'SELECT * FROM usuarios WHERE activo = 1 ORDER BY fecha_creacion DESC'
+    )
 }
 
-export async function createTicket(payload: NewTicket): Promise<number> {
-    const result = await db.execute({
-        sql: `INSERT INTO tickets (titulo, descripcion, usuario_id, estado, prioridad, categoria, fecha_creacion, fecha_actualizacion, fecha_cierre, asignado_a)
-          VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL, ?)`
-        ,
-        args: [
-            payload.titulo,
-            payload.descripcion,
-            payload.usuario_id,
-            payload.estado,
-            payload.prioridad,
-            payload.categoria,
-            payload.asignado_a,
-        ],
-    });
-    return Number(result.lastInsertRowid);
+// ===== TICKETS =====
+
+export async function crearTicket(
+    titulo: string,
+    descripcion: string,
+    usuarioId: number,
+    prioridad: Prioridad = 'media',
+    categoria?: string
+): Promise<number> {
+    const result = await execute(
+        `INSERT INTO tickets (titulo, descripcion, usuario_id, estado, prioridad, categoria, fecha_actualizacion)
+     VALUES (?, ?, ?, 'abierto', ?, ?, CURRENT_TIMESTAMP)`,
+        [titulo, descripcion, usuarioId, prioridad, categoria || null]
+    )
+    return Number(result.lastInsertRowid)
 }
 
-export async function updateTicketState(ticketId: number, nuevoEstado: Ticket["estado"], fechaCierre?: string | null) {
-    await db.execute({
-        sql: `UPDATE tickets SET estado = ?, fecha_actualizacion = CURRENT_TIMESTAMP, fecha_cierre = COALESCE(?, fecha_cierre)
-          WHERE id = ?`,
-        args: [nuevoEstado, fechaCierre ?? null, ticketId],
-    });
+export async function obtenerTicket(id: number): Promise<Ticket | null> {
+    return await queryOne<Ticket>(
+        'SELECT * FROM tickets WHERE id = ?',
+        [id]
+    )
 }
 
-export async function assignTicket(ticketId: number, userId: number) {
-    await db.execute({
-        sql: `UPDATE tickets SET asignado_a = ?, fecha_actualizacion = CURRENT_TIMESTAMP WHERE id = ?`,
-        args: [userId, ticketId],
-    });
+export async function actualizarTicket(
+    id: number,
+    estado?: EstadoTicket,
+    prioridad?: Prioridad,
+    asignadoA?: number | null
+): Promise<boolean> {
+    const updates: string[] = ['fecha_actualizacion = CURRENT_TIMESTAMP']
+    const values: any[] = []
+
+    if (estado !== undefined) {
+        updates.push('estado = ?')
+        values.push(estado)
+    }
+    if (prioridad !== undefined) {
+        updates.push('prioridad = ?')
+        values.push(prioridad)
+    }
+    if (asignadoA !== undefined) {
+        updates.push('asignado_a = ?')
+        values.push(asignadoA)
+    }
+
+    if (updates.length === 1) return false // Solo tiene fecha_actualizacion
+
+    values.push(id)
+    await execute(
+        `UPDATE tickets SET ${updates.join(', ')} WHERE id = ?`,
+        values
+    )
+    return true
 }
 
-export async function insertInteraction(payload: Omit<Interaccion, "id" | "fecha_creacion">) {
-    await db.execute({
-        sql: `INSERT INTO interacciones (ticket_id, usuario_id, tipo, contenido, metadata, fecha_creacion, es_interno)
-          VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)`
-        ,
-        args: [
-            payload.ticket_id,
-            payload.usuario_id,
-            payload.tipo,
-            payload.contenido,
-            payload.metadata,
-            payload.es_interno,
-        ],
-    });
+export async function cerrarTicket(id: number): Promise<boolean> {
+    await execute(
+        `UPDATE tickets 
+     SET estado = 'cerrado', fecha_cierre = CURRENT_TIMESTAMP, fecha_actualizacion = CURRENT_TIMESTAMP
+     WHERE id = ?`,
+        [id]
+    )
+    return true
 }
 
-export async function getInteractionsForTicket(ticketId: number, limit = 100): Promise<Interaccion[]> {
-    const result = await db.execute({
-        sql: `SELECT * FROM interacciones WHERE ticket_id = ? ORDER BY fecha_creacion DESC LIMIT ?`,
-        args: [ticketId, limit],
-    });
-    return result.rows.map((row) => mapRow<Interaccion>(row));
+export async function listarTickets(filtros?: {
+    estado?: EstadoTicket
+    usuarioId?: number
+    asignadoA?: number
+    prioridad?: Prioridad
+}): Promise<Ticket[]> {
+    let sql = 'SELECT * FROM tickets WHERE 1=1'
+    const values: any[] = []
+
+    if (filtros?.estado) {
+        sql += ' AND estado = ?'
+        values.push(filtros.estado)
+    }
+    if (filtros?.usuarioId) {
+        sql += ' AND usuario_id = ?'
+        values.push(filtros.usuarioId)
+    }
+    if (filtros?.asignadoA) {
+        sql += ' AND asignado_a = ?'
+        values.push(filtros.asignadoA)
+    }
+    if (filtros?.prioridad) {
+        sql += ' AND prioridad = ?'
+        values.push(filtros.prioridad)
+    }
+
+    sql += ' ORDER BY fecha_actualizacion DESC'
+    return await query<Ticket>(sql, values)
 }
 
-export async function getTicketWithUser(ticketId: number): Promise<(Ticket & { usuario_email: string; usuario_nombre: string }) | null> {
-    const result = await db.execute({
-        sql: `SELECT t.*, u.email AS usuario_email, u.nombre AS usuario_nombre
-          FROM tickets t
-          JOIN usuarios u ON u.id = t.usuario_id
-          WHERE t.id = ?`,
-        args: [ticketId],
-    });
-    return result.rows.length ? mapRow<any>(result.rows[0]) : null;
+export async function listarTicketsDelUsuario(usuarioId: number): Promise<Ticket[]> {
+    return await query<Ticket>(
+        `SELECT * FROM tickets 
+     WHERE usuario_id = ? 
+     ORDER BY fecha_actualizacion DESC`,
+        [usuarioId]
+    )
+}
+
+// ===== INTERACCIONES =====
+
+export async function crearInteraccion(
+    ticketId: number,
+    usuarioId: number,
+    tipo: TipoInteraccion,
+    contenido?: string,
+    metadata?: Record<string, any>,
+    esInterno: boolean = false
+): Promise<number> {
+    const result = await execute(
+        `INSERT INTO interacciones (ticket_id, usuario_id, tipo, contenido, metadata, es_interno)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+            ticketId,
+            usuarioId,
+            tipo,
+            contenido || null,
+            metadata ? JSON.stringify(metadata) : null,
+            esInterno ? 1 : 0,
+        ]
+    )
+    return Number(result.lastInsertRowid)
+}
+
+export async function obtenerInteraccion(id: number): Promise<Interaccion | null> {
+    return await queryOne<Interaccion>(
+        'SELECT * FROM interacciones WHERE id = ?',
+        [id]
+    )
+}
+
+export async function listarInteraccionesDelTicket(ticketId: number): Promise<Interaccion[]> {
+    return await query<Interaccion>(
+        `SELECT * FROM interacciones 
+     WHERE ticket_id = ? 
+     ORDER BY fecha_creacion DESC`,
+        [ticketId]
+    )
+}
+
+export async function listarInteraccionesPublicas(ticketId: number): Promise<Interaccion[]> {
+    return await query<Interaccion>(
+        `SELECT * FROM interacciones 
+     WHERE ticket_id = ? AND es_interno = 0
+     ORDER BY fecha_creacion DESC`,
+        [ticketId]
+    )
+}
+
+// ===== OPERACIONES COMPLEJAS CON TRANSACCIONES =====
+
+/**
+ * Actualiza el estado de un ticket y registra la interacción en una transacción
+ * Garantiza consistencia: o ambas operaciones se ejecutan o ninguna
+ */
+export async function actualizarTicketConInteraccion(
+    ticketId: number,
+    nuevoEstado: EstadoTicket,
+    usuarioId: number,
+    comentario?: string,
+    metadata?: Record<string, any>
+): Promise<{ ticketId: number; interaccionId: number }> {
+    return await transaction(async (client) => {
+        // Actualizar ticket
+        await execute(
+            `UPDATE tickets 
+       SET estado = ?, fecha_actualizacion = CURRENT_TIMESTAMP 
+       WHERE id = ?`,
+            [nuevoEstado, ticketId]
+        )
+
+        // Registrar interacción
+        const interaccionResult = await execute(
+            `INSERT INTO interacciones (ticket_id, usuario_id, tipo, contenido, metadata)
+       VALUES (?, ?, 'cambio_estado', ?, ?)`,
+            [
+                ticketId,
+                usuarioId,
+                comentario || null,
+                metadata ? JSON.stringify(metadata) : null,
+            ]
+        )
+
+        return {
+            ticketId,
+            interaccionId: Number(interaccionResult.lastInsertRowid),
+        }
+    })
+}
+
+/**
+ * Asigna un ticket a un operador y registra la interacción
+ */
+export async function asignarTicketConInteraccion(
+    ticketId: number,
+    operadorId: number,
+    usuarioQuienAsigna: number
+): Promise<{ ticketId: number; interaccionId: number }> {
+    return await transaction(async (client) => {
+        // Actualizar ticket
+        await execute(
+            `UPDATE tickets 
+       SET asignado_a = ?, fecha_actualizacion = CURRENT_TIMESTAMP 
+       WHERE id = ?`,
+            [operadorId, ticketId]
+        )
+
+        // Registrar interacción
+        const interaccionResult = await execute(
+            `INSERT INTO interacciones (ticket_id, usuario_id, tipo, metadata)
+       VALUES (?, ?, 'asignacion', ?)`,
+            [
+                ticketId,
+                usuarioQuienAsigna,
+                JSON.stringify({
+                    asignado_a: operadorId,
+                    anterior_asignado_a: null,
+                }),
+            ]
+        )
+
+        return {
+            ticketId,
+            interaccionId: Number(interaccionResult.lastInsertRowid),
+        }
+    })
+}
+
+/**
+ * Cierra un ticket y registra la interacción
+ */
+export async function cerrarTicketConInteraccion(
+    ticketId: number,
+    usuarioId: number,
+    comentario?: string
+): Promise<{ ticketId: number; interaccionId: number }> {
+    return await transaction(async (client) => {
+        // Actualizar ticket
+        await execute(
+            `UPDATE tickets 
+       SET estado = 'cerrado', fecha_cierre = CURRENT_TIMESTAMP, fecha_actualizacion = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+            [ticketId]
+        )
+
+        // Registrar interacción
+        const interaccionResult = await execute(
+            `INSERT INTO interacciones (ticket_id, usuario_id, tipo, contenido)
+       VALUES (?, ?, 'cierre', ?)`,
+            [ticketId, usuarioId, comentario || null]
+        )
+
+        return {
+            ticketId,
+            interaccionId: Number(interaccionResult.lastInsertRowid),
+        }
+    })
 }

@@ -1,14 +1,13 @@
-import { Redis } from "@upstash/redis";
+import { Redis } from '@upstash/redis'
 
-const redisUrl = process.env.UPSTASH_REDIS_REST_URL;
-const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+const redisUrl = process.env.UPSTASH_REDIS_REST_URL
+const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN
 
-if (!redisUrl) {
-    throw new Error("UPSTASH_REDIS_REST_URL is not defined in environment");
+if (!redisUrl || !redisToken) {
+    throw new Error('Missing Upstash Redis credentials')
 }
 
-if (!redisToken) {
-    throw new Error("UPSTASH_REDIS_REST_TOKEN is not defined in environment");
-}
-
-export const redis = new Redis({ url: redisUrl, token: redisToken });
+export const redis = new Redis({
+    url: redisUrl,
+    token: redisToken,
+})

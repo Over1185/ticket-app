@@ -1,50 +1,184 @@
-import { registrarUsuario } from "@/app/actions/users";
+'use client'
+
+import { useState } from 'react'
+import { loginUsuario, crearUsuario } from '@/app/actions/users'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 
 export default function LoginPage() {
+    const router = useRouter()
+    const [isLogin, setIsLogin] = useState(true)
+    const [isLoading, setIsLoading] = useState(false)
+    const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+    const [formData, setFormData] = useState({
+        email: '',
+        password: '',
+        nombre: '',
+        rol: 'cliente',
+    })
+
+    const handleChange = (
+        e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+    ) => {
+        const { name, value } = e.target
+        setFormData((prev) => ({ ...prev, [name]: value }))
+    }
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault()
+        setIsLoading(true)
+        setMessage(null)
+
+        try {
+            if (isLogin) {
+                const result = await loginUsuario({
+                    email: formData.email,
+                    password: formData.password,
+                })
+
+                if ('error' in result && result.error) {
+                    setMessage({ type: 'error', text: result.error })
+                } else {
+                    setMessage({ type: 'success', text: 'Sesión iniciada correctamente' })
+                    // Aquí normalmente guardarías el usuario en una cookie o contexto
+                    setTimeout(() => {
+                        router.push('/tickets')
+                    }, 1000)
+                }
+            } else {
+                const result = await crearUsuario({
+                    email: formData.email,
+                    password: formData.password,
+                    nombre: formData.nombre,
+                    rol: formData.rol,
+                })
+
+                if ('error' in result && result.error) {
+                    setMessage({ type: 'error', text: result.error })
+                } else {
+                    setMessage({ type: 'success', text: result.mensaje || 'Usuario creado exitosamente' })
+                    setTimeout(() => {
+                        setIsLogin(true)
+                        setFormData({ ...formData, password: '' })
+                    }, 1500)
+                }
+            }
+        } catch (error) {
+            setMessage({ type: 'error', text: 'Error inesperado' })
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
     return (
-        <div className="min-h-screen bg-zinc-50 px-6 py-10">
-            <div className="mx-auto flex max-w-md flex-col gap-6 rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
-                <div className="space-y-1 text-center">
-                    <p className="text-xs uppercase tracking-[0.2em] text-indigo-700">Acceso</p>
-                    <h1 className="text-2xl font-bold text-zinc-900">Demo de login</h1>
-                    <p className="text-sm text-zinc-600">
-                        Usa este formulario para crear un usuario de prueba. Para sesión real integra NextAuth y guarda cookies de rol.
-                    </p>
-                </div>
+        <div className="min-h-screen bg-linear-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-md">
+                <h1 className="text-3xl font-bold mb-2 text-center text-gray-900">
+                    Ticket System
+                </h1>
+                <p className="text-center text-gray-600 mb-6">
+                    {isLogin ? 'Inicia sesión en tu cuenta' : 'Crea una nueva cuenta'}
+                </p>
 
-                <form action={registrarUsuario} className="space-y-3">
-                    <div className="flex flex-col gap-1">
-                        <label className="text-sm font-semibold text-zinc-800">Email</label>
-                        <input name="email" type="email" required className="rounded-md border border-zinc-300 px-3 py-2 text-sm" />
+                {message && (
+                    <div
+                        className={`p-4 mb-6 rounded ${message.type === 'success'
+                            ? 'bg-green-50 text-green-800 border border-green-200'
+                            : 'bg-red-50 text-red-800 border border-red-200'
+                            }`}
+                    >
+                        {message.text}
+                    </div>
+                )}
+
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    {!isLogin && (
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Nombre</label>
+                            <input
+                                type="text"
+                                name="nombre"
+                                value={formData.nombre}
+                                onChange={handleChange}
+                                required={!isLogin}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                placeholder="Tu nombre"
+                            />
+                        </div>
+                    )}
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                        <input
+                            type="email"
+                            name="email"
+                            value={formData.email}
+                            onChange={handleChange}
+                            required
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="tu@email.com"
+                        />
                     </div>
 
-                    <div className="flex flex-col gap-1">
-                        <label className="text-sm font-semibold text-zinc-800">Nombre</label>
-                        <input name="nombre" required className="rounded-md border border-zinc-300 px-3 py-2 text-sm" />
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Contraseña</label>
+                        <input
+                            type="password"
+                            name="password"
+                            value={formData.password}
+                            onChange={handleChange}
+                            required
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="••••••••"
+                        />
                     </div>
 
-                    <div className="flex flex-col gap-1">
-                        <label className="text-sm font-semibold text-zinc-800">Rol</label>
-                        <select name="rol" className="rounded-md border border-zinc-300 px-3 py-2 text-sm" defaultValue="cliente">
-                            <option value="cliente">Cliente</option>
-                            <option value="operador">Operador</option>
-                            <option value="admin">Admin</option>
-                        </select>
-                    </div>
-
-                    <div className="flex flex-col gap-1">
-                        <label className="text-sm font-semibold text-zinc-800">Password</label>
-                        <input name="password" type="password" required className="rounded-md border border-zinc-300 px-3 py-2 text-sm" />
-                    </div>
+                    {!isLogin && (
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Rol</label>
+                            <select
+                                name="rol"
+                                value={formData.rol}
+                                onChange={handleChange}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                                <option value="cliente">Cliente</option>
+                                <option value="operador">Operador</option>
+                                <option value="admin">Administrador</option>
+                            </select>
+                        </div>
+                    )}
 
                     <button
                         type="submit"
-                        className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+                        disabled={isLoading}
+                        className="w-full bg-blue-600 text-white font-medium py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition"
                     >
-                        Registrar usuario demo
+                        {isLoading ? (isLogin ? 'Iniciando...' : 'Creando...') : isLogin ? 'Iniciar Sesión' : 'Crear Cuenta'}
                     </button>
                 </form>
+
+                <div className="mt-6 text-center">
+                    <p className="text-gray-600">
+                        {isLogin ? '¿No tienes cuenta?' : '¿Ya tienes cuenta?'}{' '}
+                        <button
+                            onClick={() => {
+                                setIsLogin(!isLogin)
+                                setMessage(null)
+                                setFormData({
+                                    email: '',
+                                    password: '',
+                                    nombre: '',
+                                    rol: 'cliente',
+                                })
+                            }}
+                            className="text-blue-600 hover:text-blue-800 font-medium"
+                        >
+                            {isLogin ? 'Regístrate' : 'Inicia sesión'}
+                        </button>
+                    </p>
+                </div>
             </div>
         </div>
-    );
+    )
 }

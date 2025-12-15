@@ -1,44 +1,113 @@
-import { crearTicketAction } from "@/app/actions/tickets";
-import type { Usuario } from "@/lib/db/queries";
+'use client'
 
-export function TicketForm({
-    userId,
-    operadores,
-}: {
-    userId: number;
-    operadores: Pick<Usuario, "id" | "nombre">[];
-}) {
+import { useState } from 'react'
+import { crearTicket } from '@/app/actions/tickets'
+
+interface TicketFormProps {
+    usuarioId: number
+    onSuccess?: () => void
+}
+
+export function TicketForm({ usuarioId, onSuccess }: TicketFormProps) {
+    const [isLoading, setIsLoading] = useState(false)
+    const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(
+        null
+    )
+    const [formData, setFormData] = useState({
+        titulo: '',
+        descripcion: '',
+        prioridad: 'media',
+        categoria: '',
+    })
+
+    const handleChange = (
+        e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+    ) => {
+        const { name, value } = e.target
+        setFormData((prev) => ({ ...prev, [name]: value }))
+    }
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault()
+        setIsLoading(true)
+        setMessage(null)
+
+        try {
+            const result = await crearTicket({
+                ...formData,
+                usuarioId,
+            })
+
+            if ('error' in result && result.error) {
+                setMessage({ type: 'error', text: result.error })
+            } else {
+                setMessage({ type: 'success', text: result.mensaje || 'Ticket creado exitosamente' })
+                setFormData({
+                    titulo: '',
+                    descripcion: '',
+                    prioridad: 'media',
+                    categoria: '',
+                })
+                onSuccess?.()
+            }
+        } catch (error) {
+            setMessage({ type: 'error', text: 'Error al crear el ticket' })
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
     return (
-        <form action={crearTicketAction} className="space-y-4 rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
-            <input type="hidden" name="usuario_id" value={userId} />
+        <form onSubmit={handleSubmit} className="max-w-2xl mx-auto p-6 border rounded-lg shadow-sm">
+            <h2 className="text-2xl font-bold mb-6">Crear Nuevo Ticket</h2>
 
-            <div className="flex flex-col gap-2">
-                <label className="text-sm font-semibold text-zinc-700">Título</label>
+            {message && (
+                <div
+                    className={`p-4 mb-4 rounded ${message.type === 'success'
+                        ? 'bg-green-50 text-green-800 border border-green-200'
+                        : 'bg-red-50 text-red-800 border border-red-200'
+                        }`}
+                >
+                    {message.text}
+                </div>
+            )}
+
+            <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Título</label>
                 <input
+                    type="text"
                     name="titulo"
+                    value={formData.titulo}
+                    onChange={handleChange}
                     required
-                    className="rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
-                    placeholder="Ej. Error en factura"
+                    minLength={5}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Resumen breve del problema"
                 />
             </div>
 
-            <div className="flex flex-col gap-2">
-                <label className="text-sm font-semibold text-zinc-700">Descripción</label>
+            <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
                 <textarea
                     name="descripcion"
+                    value={formData.descripcion}
+                    onChange={handleChange}
                     required
-                    className="min-h-[120px] rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
-                    placeholder="Describe el problema"
+                    minLength={10}
+                    rows={5}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Describe detalladamente el problema"
                 />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-                <div className="flex flex-col gap-2">
-                    <label className="text-sm font-semibold text-zinc-700">Prioridad</label>
+            <div className="grid grid-cols-2 gap-4 mb-6">
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Prioridad</label>
                     <select
                         name="prioridad"
-                        className="rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
-                        defaultValue="media"
+                        value={formData.prioridad}
+                        onChange={handleChange}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                         <option value="baja">Baja</option>
                         <option value="media">Media</option>
@@ -47,38 +116,26 @@ export function TicketForm({
                     </select>
                 </div>
 
-                <div className="flex flex-col gap-2">
-                    <label className="text-sm font-semibold text-zinc-700">Asignar a</label>
-                    <select
-                        name="asignado_a"
-                        className="rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
-                        defaultValue=""
-                    >
-                        <option value="">Sin asignar</option>
-                        {operadores.map((op) => (
-                            <option key={op.id} value={op.id}>
-                                {op.nombre}
-                            </option>
-                        ))}
-                    </select>
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
+                    <input
+                        type="text"
+                        name="categoria"
+                        value={formData.categoria}
+                        onChange={handleChange}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="Ej: Billing, Técnico, etc"
+                    />
                 </div>
-            </div>
-
-            <div className="flex flex-col gap-2">
-                <label className="text-sm font-semibold text-zinc-700">Categoría</label>
-                <input
-                    name="categoria"
-                    className="rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
-                    placeholder="Ej. facturacion"
-                />
             </div>
 
             <button
                 type="submit"
-                className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+                disabled={isLoading}
+                className="w-full bg-blue-600 text-white font-medium py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition"
             >
-                Crear ticket
+                {isLoading ? 'Creando...' : 'Crear Ticket'}
             </button>
         </form>
-    );
+    )
 }

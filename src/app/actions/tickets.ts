@@ -1,153 +1,329 @@
 'use server'
 
-import { z } from "zod";
-import { db } from "@/lib/db/client";
-import {
-    createTicket,
-    insertInteraction,
-    updateTicketState,
-} from "@/lib/db/queries";
-import { enqueueTask } from "@/lib/redis/queue";
+import { z } from 'zod'
+import { validateEstadoTicket, validatePrioridad } from '@/lib/auth/permissions'
+import * as queries from '@/lib/db/queries'
+import { invalidateTicketCache, getCachedTicket, cacheTicket } from '@/lib/redis/cache'
+import { enqueueTask } from '@/lib/redis/queue'
 
-const estadoSchema = z.enum(["abierto", "en_progreso", "resuelto", "cerrado"]);
-const prioridadSchema = z.enum(["baja", "media", "alta", "critica"]);
-
-const actualizarSchema = z.object({
-    ticketId: z.number().int().positive(),
-    nuevoEstado: estadoSchema,
-    comentario: z.string().min(1),
+// Esquemas de validación
+const CrearTicketSchema = z.object({
+    titulo: z.string().min(5, 'El título debe tener al menos 5 caracteres'),
+    descripcion: z.string().min(10, 'La descripción debe tener al menos 10 caracteres'),
     usuarioId: z.number().int().positive(),
-});
+    prioridad: z.enum(['baja', 'media', 'alta', 'critica']).optional(),
+    categoria: z.string().optional(),
+})
 
+const ActualizarTicketSchema = z.object({
+    ticketId: z.number().int().positive(),
+    estado: z.enum(['abierto', 'en_progreso', 'resuelto', 'cerrado']).optional(),
+    prioridad: z.enum(['baja', 'media', 'alta', 'critica']).optional(),
+    asignadoA: z.number().int().positive().nullable().optional(),
+})
+
+const CrearInteraccionSchema = z.object({
+    ticketId: z.number().int().positive(),
+    usuarioId: z.number().int().positive(),
+    contenido: z.string().min(1, 'El contenido no puede estar vacío'),
+    esInterno: z.boolean().optional(),
+})
+
+/**
+ * Crea un nuevo ticket
+ */
+export async function crearTicket(datos: unknown) {
+    try {
+        const { titulo, descripcion, usuarioId, prioridad = 'media', categoria } =
+            CrearTicketSchema.parse(datos)
+
+        const prioridadValidada = validatePrioridad(prioridad)
+
+        const ticketId = await queries.crearTicket(
+            titulo,
+            descripcion,
+            usuarioId,
+            prioridadValidada,
+            categoria
+        )
+
+        // Cachear el ticket nuevo
+        const ticket = await queries.obtenerTicket(ticketId)
+        if (ticket) {
+            await cacheTicket(ticketId, ticket)
+        }
+
+        return {
+            success: true,
+            ticketId,
+            mensaje: 'Ticket creado exitosamente',
+        }
+    } catch (error) {
+        console.error('Error creating ticket:', error)
+        if (error instanceof z.ZodError) {
+            return { error: error.issues[0].message }
+        }
+        return { error: 'Error al crear el ticket' }
+    }
+}
+
+/**
+ * Obtiene los detalles de un ticket
+ */
+export async function obtenerTicket(ticketId: number) {
+    try {
+        // Intentar obtener del caché
+        const cached = await getCachedTicket(ticketId)
+        if (cached) {
+            return { success: true, ticket: cached }
+        }
+
+        // Si no está en caché, obtener de la BD
+        const ticket = await queries.obtenerTicket(ticketId)
+        if (!ticket) {
+            return { error: 'Ticket no encontrado' }
+        }
+
+        // Cachear para próxima vez
+        await cacheTicket(ticketId, ticket)
+
+        return { success: true, ticket }
+    } catch (error) {
+        console.error('Error fetching ticket:', error)
+        return { error: 'Error al obtener el ticket' }
+    }
+}
+
+/**
+ * Actualiza un ticket
+ */
+export async function actualizarTicket(datos: unknown) {
+    try {
+        const { ticketId, estado, prioridad, asignadoA } =
+            ActualizarTicketSchema.parse(datos)
+
+        const estadoValidado = estado ? validateEstadoTicket(estado) : undefined
+        const prioridadValidada = prioridad ? validatePrioridad(prioridad) : undefined
+
+        await queries.actualizarTicket(ticketId, estadoValidado, prioridadValidada, asignadoA)
+
+        // Invalidar caché
+        await invalidateTicketCache(ticketId)
+
+        return {
+            success: true,
+            mensaje: 'Ticket actualizado exitosamente',
+        }
+    } catch (error) {
+        console.error('Error updating ticket:', error)
+        if (error instanceof z.ZodError) {
+            return { error: error.issues[0].message }
+        }
+        return { error: 'Error al actualizar el ticket' }
+    }
+}
+
+/**
+ * Actualiza el estado del ticket y crea una interacción en una transacción
+ * Garantiza consistencia: o ambas operaciones se ejecutan o ninguna
+ */
 export async function actualizarTicketConInteraccion(
     ticketId: number,
     nuevoEstado: string,
-    comentario: string,
     usuarioId: number,
+    comentario?: string
 ) {
-    const parsed = actualizarSchema.safeParse({ ticketId, nuevoEstado, comentario, usuarioId });
-    if (!parsed.success) {
-        return { success: false, message: parsed.error.message };
-    }
-
-    const tx = await db.transaction();
     try {
-        await tx.execute({
-            sql: `UPDATE tickets SET estado = ?, fecha_actualizacion = CURRENT_TIMESTAMP WHERE id = ?`,
-            args: [parsed.data.nuevoEstado, parsed.data.ticketId],
-        });
+        const estadoValidado = validateEstadoTicket(nuevoEstado)
 
-        await tx.execute({
-            sql: `INSERT INTO interacciones (ticket_id, usuario_id, tipo, contenido, metadata, fecha_creacion, es_interno)
-            VALUES (?, ?, 'cambio_estado', ?, json(?), CURRENT_TIMESTAMP, 0)`,
-            args: [
-                parsed.data.ticketId,
-                parsed.data.usuarioId,
-                parsed.data.comentario,
-                JSON.stringify({ estado: parsed.data.nuevoEstado }),
-            ],
-        });
+        const resultado = await queries.actualizarTicketConInteraccion(
+            ticketId,
+            estadoValidado,
+            usuarioId,
+            comentario,
+            { razon: 'actualización de estado desde UI' }
+        )
 
-        await tx.commit();
-        await enqueueTask("refresh_ticket_cache", { ticketId: parsed.data.ticketId });
-        return { success: true, message: "Ticket actualizado" };
+        // Invalidar caché
+        await invalidateTicketCache(ticketId)
+
+        return {
+            success: true,
+            resultado,
+            mensaje: 'Ticket actualizado y interacción registrada',
+        }
     } catch (error) {
-        await tx.rollback();
-        console.error("Transaction error", error);
-        return { success: false, message: "No se pudo actualizar el ticket" };
+        console.error('Error updating ticket with interaction:', error)
+        if (error instanceof z.ZodError) {
+            return { error: error.issues[0].message }
+        }
+        return { error: 'Error al actualizar el ticket' }
     }
 }
 
-const createTicketSchema = z.object({
-    titulo: z.string().min(3),
-    descripcion: z.string().min(5),
-    usuario_id: z.number().int().positive(),
-    prioridad: prioridadSchema.default("media"),
-    categoria: z.string().optional().nullable(),
-    asignado_a: z.number().int().positive().optional().nullable(),
-});
-
-export async function crearTicketAction(formData: FormData) {
-    const data = {
-        titulo: formData.get("titulo"),
-        descripcion: formData.get("descripcion"),
-        usuario_id: Number(formData.get("usuario_id")),
-        prioridad: formData.get("prioridad") ?? "media",
-        categoria: formData.get("categoria"),
-        asignado_a: formData.get("asignado_a"),
-    };
-
-    const parsed = createTicketSchema.safeParse({
-        ...data,
-        categoria: data.categoria ? String(data.categoria) : null,
-        asignado_a: data.asignado_a ? Number(data.asignado_a) : null,
-        prioridad: String(data.prioridad),
-    });
-
-    if (!parsed.success) {
-        return { success: false, message: parsed.error.message };
-    }
-
+/**
+ * Asigna un ticket a un operador
+ */
+export async function asignarTicket(
+    ticketId: number,
+    operadorId: number,
+    usuarioQuienAsigna: number
+) {
     try {
-        const id = await createTicket({
-            titulo: parsed.data.titulo,
-            descripcion: parsed.data.descripcion,
-            usuario_id: parsed.data.usuario_id,
-            estado: "abierto",
-            prioridad: parsed.data.prioridad,
-            categoria: parsed.data.categoria ?? null,
-            asignado_a: parsed.data.asignado_a ?? null,
-        });
+        const resultado = await queries.asignarTicketConInteraccion(
+            ticketId,
+            operadorId,
+            usuarioQuienAsigna
+        )
 
-        await insertInteraction({
-            ticket_id: id,
-            usuario_id: parsed.data.usuario_id,
-            tipo: "comentario",
-            contenido: "Ticket creado",
-            metadata: JSON.stringify({ createdFrom: "form" }),
-            es_interno: 0,
-        });
+        // Invalidar caché
+        await invalidateTicketCache(ticketId)
 
-        return { success: true, message: "Ticket creado", ticketId: id };
+        return {
+            success: true,
+            resultado,
+            mensaje: 'Ticket asignado exitosamente',
+        }
     } catch (error) {
-        console.error("Error creando ticket", error);
-        return { success: false, message: "No se pudo crear el ticket" };
+        console.error('Error assigning ticket:', error)
+        return { error: 'Error al asignar el ticket' }
     }
 }
 
-const interactionSchema = z.object({
-    ticket_id: z.number().int().positive(),
-    usuario_id: z.number().int().positive(),
-    tipo: z.enum(["comentario", "cambio_estado", "asignacion", "cierre"]),
-    contenido: z.string().min(1),
-    es_interno: z.boolean().default(false),
-});
-
-export async function crearInteraccionAction(formData: FormData) {
-    const parsed = interactionSchema.safeParse({
-        ticket_id: Number(formData.get("ticket_id")),
-        usuario_id: Number(formData.get("usuario_id")),
-        tipo: String(formData.get("tipo") ?? "comentario"),
-        contenido: String(formData.get("contenido") ?? ""),
-        es_interno: formData.get("es_interno") === "on",
-    });
-
-    if (!parsed.success) {
-        return { success: false, message: parsed.error.message };
-    }
-
+/**
+ * Cierra un ticket
+ */
+export async function cerrarTicket(
+    ticketId: number,
+    usuarioId: number,
+    comentario?: string
+) {
     try {
-        await insertInteraction({
-            ticket_id: parsed.data.ticket_id,
-            usuario_id: parsed.data.usuario_id,
-            tipo: parsed.data.tipo,
-            contenido: parsed.data.contenido,
-            metadata: JSON.stringify({ source: "form" }),
-            es_interno: parsed.data.es_interno ? 1 : 0,
-        });
-        return { success: true, message: "Interacción registrada" };
+        const resultado = await queries.cerrarTicketConInteraccion(
+            ticketId,
+            usuarioId,
+            comentario
+        )
+
+        // Invalidar caché
+        await invalidateTicketCache(ticketId)
+
+        return {
+            success: true,
+            resultado,
+            mensaje: 'Ticket cerrado exitosamente',
+        }
     } catch (error) {
-        console.error("Error creando interacción", error);
-        return { success: false, message: "No se pudo crear la interacción" };
+        console.error('Error closing ticket:', error)
+        return { error: 'Error al cerrar el ticket' }
+    }
+}
+
+/**
+ * Lista los tickets del usuario
+ */
+export async function listarTicketosDelUsuario(usuarioId: number) {
+    try {
+        const tickets = await queries.listarTicketsDelUsuario(usuarioId)
+        return { success: true, tickets }
+    } catch (error) {
+        console.error('Error listing user tickets:', error)
+        return { error: 'Error al listar los tickets' }
+    }
+}
+
+/**
+ * Lista todos los tickets (con filtros opcionales)
+ */
+export async function listarTickets(filtros?: {
+    estado?: string
+    usuarioId?: number
+    asignadoA?: number
+    prioridad?: string
+}) {
+    try {
+        const filtrosValidados: any = {}
+
+        if (filtros?.estado) {
+            filtrosValidados.estado = validateEstadoTicket(filtros.estado)
+        }
+        if (filtros?.prioridad) {
+            filtrosValidados.prioridad = validatePrioridad(filtros.prioridad)
+        }
+        if (filtros?.usuarioId) {
+            filtrosValidados.usuarioId = filtros.usuarioId
+        }
+        if (filtros?.asignadoA) {
+            filtrosValidados.asignadoA = filtros.asignadoA
+        }
+
+        const tickets = await queries.listarTickets(filtrosValidados)
+        return { success: true, tickets }
+    } catch (error) {
+        console.error('Error listing tickets:', error)
+        if (error instanceof z.ZodError) {
+            return { error: error.issues[0].message }
+        }
+        return { error: 'Error al listar los tickets' }
+    }
+}
+
+/**
+ * Crea una interacción (comentario) en un ticket
+ */
+export async function crearInteraccion(datos: unknown) {
+    try {
+        const { ticketId, usuarioId, contenido, esInterno = false } =
+            CrearInteraccionSchema.parse(datos)
+
+        const interaccionId = await queries.crearInteraccion(
+            ticketId,
+            usuarioId,
+            'comentario',
+            contenido,
+            undefined,
+            esInterno
+        )
+
+        // Invalidar caché del ticket
+        await invalidateTicketCache(ticketId)
+
+        return {
+            success: true,
+            interaccionId,
+            mensaje: 'Comentario añadido exitosamente',
+        }
+    } catch (error) {
+        console.error('Error creating interaction:', error)
+        if (error instanceof z.ZodError) {
+            return { error: error.issues[0].message }
+        }
+        return { error: 'Error al añadir el comentario' }
+    }
+}
+
+/**
+ * Lista las interacciones de un ticket
+ */
+export async function listarInteracciones(ticketId: number) {
+    try {
+        const interacciones = await queries.listarInteraccionesDelTicket(ticketId)
+        return { success: true, interacciones }
+    } catch (error) {
+        console.error('Error listing interactions:', error)
+        return { error: 'Error al listar las interacciones' }
+    }
+}
+
+/**
+ * Lista las interacciones públicas de un ticket (sin las internas)
+ */
+export async function listarInteraccionesPublicas(ticketId: number) {
+    try {
+        const interacciones = await queries.listarInteraccionesPublicas(ticketId)
+        return { success: true, interacciones }
+    } catch (error) {
+        console.error('Error listing public interactions:', error)
+        return { error: 'Error al listar las interacciones' }
     }
 }

@@ -1,51 +1,76 @@
-import { NextResponse } from "next/server";
-import { z } from "zod";
-import { createTicket, listTickets } from "@/lib/db/queries";
+import { NextRequest, NextResponse } from 'next/server'
+import * as queries from '@/lib/db/queries'
 
-const createTicketSchema = z.object({
-    titulo: z.string().min(3),
-    descripcion: z.string().min(5),
-    usuario_id: z.number().int().positive(),
-    prioridad: z.enum(["baja", "media", "alta", "critica"]).default("media"),
-    categoria: z.string().optional().nullable(),
-    asignado_a: z.number().int().positive().optional().nullable(),
-});
+/**
+ * GET /api/tickets
+ * Lista todos los tickets con filtros opcionales
+ */
+export async function GET(request: NextRequest) {
+    try {
+        const { searchParams } = new URL(request.url)
 
-export async function GET(request: Request) {
-    const { searchParams } = new URL(request.url);
-    const estado = searchParams.get("estado") ?? undefined;
-    const prioridad = searchParams.get("prioridad") ?? undefined;
-    const limit = Number(searchParams.get("limit") ?? 50);
+        const estado = searchParams.get('estado')
+        const usuarioId = searchParams.get('usuarioId')
+        const asignadoA = searchParams.get('asignadoA')
+        const prioridad = searchParams.get('prioridad')
 
-    const tickets = await listTickets({
-        estado: estado as any,
-        prioridad: prioridad as any,
-        limit,
-    });
+        const filtros: any = {}
+        if (estado) filtros.estado = estado
+        if (usuarioId) filtros.usuarioId = parseInt(usuarioId)
+        if (asignadoA) filtros.asignadoA = parseInt(asignadoA)
+        if (prioridad) filtros.prioridad = prioridad
 
-    return NextResponse.json({ tickets });
+        const tickets = await queries.listarTickets(filtros)
+
+        return NextResponse.json(
+            { success: true, tickets, count: tickets.length },
+            { status: 200 }
+        )
+    } catch (error) {
+        console.error('Error in GET /api/tickets:', error)
+        return NextResponse.json(
+            { error: 'Error al obtener tickets' },
+            { status: 500 }
+        )
+    }
 }
 
-export async function POST(request: Request) {
-    const body = await request.json();
-    const parsed = createTicketSchema.safeParse(body);
-    if (!parsed.success) {
-        return NextResponse.json({ error: parsed.error.message }, { status: 400 });
-    }
-
+/**
+ * POST /api/tickets
+ * Crea un nuevo ticket (mismo que crearTicket server action, para compatibilidad REST)
+ */
+export async function POST(request: NextRequest) {
     try {
-        const id = await createTicket({
-            titulo: parsed.data.titulo,
-            descripcion: parsed.data.descripcion,
-            usuario_id: parsed.data.usuario_id,
-            estado: "abierto",
-            prioridad: parsed.data.prioridad,
-            categoria: parsed.data.categoria ?? null,
-            asignado_a: parsed.data.asignado_a ?? null,
-        });
-        return NextResponse.json({ ticketId: id }, { status: 201 });
+        const body = await request.json()
+
+        const { titulo, descripcion, usuarioId, prioridad = 'media', categoria } = body
+
+        if (!titulo || !descripcion || !usuarioId) {
+            return NextResponse.json(
+                { error: 'Faltan campos requeridos' },
+                { status: 400 }
+            )
+        }
+
+        const ticketId = await queries.crearTicket(
+            titulo,
+            descripcion,
+            usuarioId,
+            prioridad,
+            categoria
+        )
+
+        const ticket = await queries.obtenerTicket(ticketId)
+
+        return NextResponse.json(
+            { success: true, ticketId, ticket },
+            { status: 201 }
+        )
     } catch (error) {
-        console.error("Error creando ticket API", error);
-        return NextResponse.json({ error: "No se pudo crear el ticket" }, { status: 500 });
+        console.error('Error in POST /api/tickets:', error)
+        return NextResponse.json(
+            { error: 'Error al crear el ticket' },
+            { status: 500 }
+        )
     }
 }
