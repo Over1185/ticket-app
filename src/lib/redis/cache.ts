@@ -3,6 +3,29 @@ import { redis } from './client'
 const CACHE_TTL = 300 // 5 minutos por defecto
 
 /**
+ * Parsea datos del caché de forma segura
+ * Upstash Redis puede devolver objetos ya parseados o strings
+ */
+function safeParseCache<T>(cached: unknown): T | null {
+    if (cached === null || cached === undefined) {
+        return null
+    }
+    // Si ya es un objeto, devolverlo directamente
+    if (typeof cached === 'object') {
+        return cached as T
+    }
+    // Si es string, intentar parsear
+    if (typeof cached === 'string') {
+        try {
+            return JSON.parse(cached) as T
+        } catch {
+            return null
+        }
+    }
+    return null
+}
+
+/**
  * Guarda un usuario en caché
  */
 export async function cacheUser(userId: number, userData: any) {
@@ -22,7 +45,7 @@ export async function cacheUser(userId: number, userData: any) {
 export async function getCachedUser(userId: number) {
     try {
         const cached = await redis.get(`user:${userId}`)
-        return cached ? JSON.parse(cached as string) : null
+        return safeParseCache(cached)
     } catch (error) {
         console.error('Get cached user error:', error)
         return null
@@ -59,7 +82,7 @@ export async function cacheTicket(ticketId: number, ticketData: any) {
 export async function getCachedTicket(ticketId: number) {
     try {
         const cached = await redis.get(`ticket:${ticketId}`)
-        return cached ? JSON.parse(cached as string) : null
+        return safeParseCache(cached)
     } catch (error) {
         console.error('Get cached ticket error:', error)
         return null
@@ -74,5 +97,26 @@ export async function invalidateTicketCache(ticketId: number) {
         await redis.del(`ticket:${ticketId}`)
     } catch (error) {
         console.error('Invalidate ticket cache error:', error)
+    }
+}
+
+/**
+ * Limpia todo el caché de tickets y usuarios
+ */
+export async function clearAllCache(): Promise<{ deleted: number }> {
+    try {
+        // Obtener todas las keys que empiecen con ticket: o user:
+        const ticketKeys = await redis.keys('ticket:*')
+        const userKeys = await redis.keys('user:*')
+        const allKeys = [...ticketKeys, ...userKeys]
+
+        if (allKeys.length > 0) {
+            await redis.del(...allKeys)
+        }
+
+        return { deleted: allKeys.length }
+    } catch (error) {
+        console.error('Clear all cache error:', error)
+        return { deleted: 0 }
     }
 }

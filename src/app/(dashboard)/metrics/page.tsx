@@ -37,6 +37,7 @@ export default function MetricsPage() {
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
+    const [clearingCache, setClearingCache] = useState(false)
 
     const fetchMetrics = async () => {
         try {
@@ -51,6 +52,19 @@ export default function MetricsPage() {
             console.error(err)
         } finally {
             setIsLoading(false)
+        }
+    }
+
+    const clearCache = async () => {
+        setClearingCache(true)
+        try {
+            const response = await fetch('/api/metrics', { method: 'DELETE' })
+            if (!response.ok) throw new Error('Error al limpiar caché')
+            await fetchMetrics()
+        } catch (err) {
+            console.error('Error clearing cache:', err)
+        } finally {
+            setClearingCache(false)
         }
     }
 
@@ -112,12 +126,21 @@ export default function MetricsPage() {
                             Última actualización: {lastUpdate?.toLocaleTimeString('es-ES')}
                         </p>
                     </div>
-                    <button
-                        onClick={fetchMetrics}
-                        className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
-                    >
-                        🔄 Actualizar
-                    </button>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={clearCache}
+                            disabled={clearingCache}
+                            className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 flex items-center gap-2 disabled:bg-gray-400"
+                        >
+                            {clearingCache ? '⏳' : '🗑️'} Limpiar Caché
+                        </button>
+                        <button
+                            onClick={fetchMetrics}
+                            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                        >
+                            🔄 Actualizar
+                        </button>
+                    </div>
                 </div>
 
                 {/* Status Cards */}

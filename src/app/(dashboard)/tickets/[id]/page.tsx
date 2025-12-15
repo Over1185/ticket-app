@@ -23,13 +23,13 @@ export default function TicketDetailPage() {
             const ticketResult = await obtenerTicket(ticketId)
             const interaccionesResult = await listarInteracciones(ticketId)
 
-            if ('ticket' in ticketResult) {
-                setTicket(ticketResult.ticket)
-                setNuevoEstado(ticketResult.ticket.estado)
+            if ('ticket' in ticketResult && ticketResult.ticket) {
+                setTicket(ticketResult.ticket as Ticket)
+                setNuevoEstado((ticketResult.ticket as Ticket).estado)
             }
 
             if ('interacciones' in interaccionesResult && interaccionesResult.interacciones) {
-                setInteracciones(interaccionesResult.interacciones)
+                setInteracciones(interaccionesResult.interacciones as Interaccion[])
             }
         } catch (error) {
             console.error('Error loading ticket:', error)

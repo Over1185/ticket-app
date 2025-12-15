@@ -34,7 +34,7 @@ export default function RootLayout({
         </main>
         <footer className="bg-white border-t border-gray-200 py-6">
           <div className="max-w-7xl mx-auto px-4 text-center text-gray-500 text-sm">
-            <p>© 2024 Sistema de Tickets. Construido con Next.js 16, Turso y Redis.</p>
+            <p>© 2025 Sistema de Tickets. Construido con Next.js 16, Turso y Redis.</p>
           </div>
         </footer>
       </body>
