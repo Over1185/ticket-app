@@ -5,8 +5,10 @@ import { revalidatePath } from 'next/cache'
 import { validateEstadoTicket, validatePrioridad, hasPermission, Role } from '@/lib/auth/permissions'
 import { getSession } from '@/lib/auth/session'
 import * as queries from '@/lib/db/queries'
-import { invalidateTicketCache, getCachedTicket, cacheTicket } from '@/lib/redis/cache'
+import { invalidateTicketCache, getCachedTicket, cacheTicket, invalidateUserTicketsCache } from '@/lib/redis/cache'
 import { enqueueTask } from '@/lib/redis/queue'
+import { redis } from '@/lib/redis/client'
+import type { Ticket } from '@/lib/db/queries'
 
 /**
  * Serializa un objeto para que sea compatible con Client Components
@@ -88,6 +90,15 @@ export async function crearTicket(datos: unknown) {
             await cacheTicket(ticketId, ticket)
         }
 
+        // Invalidar lista de tickets del usuario
+        const session = await getSession()
+        if (session) {
+            await invalidateUserTicketsCache(session.id)
+        }
+
+        // Revalidar la página de tickets
+        revalidatePath('/tickets')
+
         return {
             success: true,
             ticketId,
@@ -115,7 +126,7 @@ export async function obtenerTicket(ticketId: number) {
 
         // Intentar obtener del caché
         const cached = await getCachedTicket(ticketId)
-        let ticket = cached
+        let ticket: Ticket | null = cached as Ticket | null
 
         if (!ticket) {
             // Si no está en caché, obtener de la BD
@@ -150,10 +161,20 @@ export async function actualizarTicket(datos: unknown) {
         const estadoValidado = estado ? validateEstadoTicket(estado) : undefined
         const prioridadValidada = prioridad ? validatePrioridad(prioridad) : undefined
 
+        // Obtener el ticket antes de actualizar para saber el usuario
+        const ticket = await queries.obtenerTicket(ticketId)
+
         await queries.actualizarTicket(ticketId, estadoValidado, prioridadValidada, asignadoA)
 
-        // Invalidar caché
+        // Invalidar caché del ticket y de las listas
         await invalidateTicketCache(ticketId)
+        if (ticket) {
+            await invalidateUserTicketsCache(ticket.usuario_id)
+        }
+
+        // Revalidar páginas
+        revalidatePath('/tickets')
+        revalidatePath(`/tickets/${ticketId}`)
 
         return {
             success: true,
@@ -192,6 +213,9 @@ export async function actualizarTicketConInteraccion(
 
         const estadoValidado = validateEstadoTicket(nuevoEstado)
 
+        // Obtener el ticket para saber el usuario
+        const ticket = await queries.obtenerTicket(ticketId)
+
         const resultado = await queries.actualizarTicketConInteraccion(
             ticketId,
             estadoValidado,
@@ -199,8 +223,12 @@ export async function actualizarTicketConInteraccion(
             comentario
         )
 
-        // Invalidar caché
-        await invalidateTicketCache(ticketId)
+        // Invalidar caché del ticket, interacciones y listas
+        await Promise.all([
+            invalidateTicketCache(ticketId),
+            ticket ? invalidateUserTicketsCache(ticket.usuario_id) : Promise.resolve(),
+            redis.del(`interactions:${ticketId}`)
+        ])
 
         // Revalidar las páginas para que se actualicen en tiempo real
         revalidatePath('/tickets')

@@ -37,9 +37,9 @@ export function InteractionTimeline({
             })
 
             if ('error' in result) {
-                setMessage({ type: 'error', text: result.error })
+                setMessage({ type: 'error', text: result.error || 'Error desconocido' })
             } else {
-                setMessage({ type: 'success', text: result.mensaje })
+                setMessage({ type: 'success', text: result.mensaje || 'Interacción creada' })
                 setContenido('')
                 onInteractionCreated?.()
             }

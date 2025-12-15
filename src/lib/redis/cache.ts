@@ -101,6 +101,23 @@ export async function invalidateTicketCache(ticketId: number) {
 }
 
 /**
+ * Invalida todos los caché relacionados con tickets de un usuario
+ */
+export async function invalidateUserTicketsCache(userId: number) {
+    try {
+        // Obtener todas las claves de tickets del usuario
+        const pattern = `tickets:user:${userId}:*`
+        const keys = await redis.keys(pattern)
+
+        if (keys && keys.length > 0) {
+            await redis.del(...keys)
+        }
+    } catch (error) {
+        console.error('Invalidate user tickets cache error:', error)
+    }
+}
+
+/**
  * Limpia todo el caché de tickets y usuarios
  */
 export async function clearAllCache(): Promise<{ deleted: number }> {

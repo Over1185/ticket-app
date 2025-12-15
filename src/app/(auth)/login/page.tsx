@@ -1,12 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { loginUsuario, crearUsuario } from '@/app/actions/users'
-import { useRouter } from 'next/navigation'
-import Link from 'next/link'
+import { loginAndRedirect, crearUsuario } from '@/app/actions/users'
 
 export default function LoginPage() {
-    const router = useRouter()
     const [isLogin, setIsLogin] = useState(true)
     const [isLoading, setIsLoading] = useState(false)
     const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
@@ -31,20 +28,19 @@ export default function LoginPage() {
 
         try {
             if (isLogin) {
-                const result = await loginUsuario({
+                // loginAndRedirect lanzará un redirect si es exitoso
+                // Si hay error, lo devuelve
+                const result = await loginAndRedirect({
                     email: formData.email,
                     password: formData.password,
                 })
 
+                // Solo llegamos aquí si hubo un error
                 if ('error' in result && result.error) {
                     setMessage({ type: 'error', text: result.error })
-                } else {
-                    setMessage({ type: 'success', text: 'Sesión iniciada correctamente' })
-                    setTimeout(() => {
-                        router.push('/tickets')
-                        router.refresh()
-                    }, 500)
+                    setIsLoading(false)
                 }
+                // Si fue exitoso, el redirect ya ocurrió y este código no se ejecuta
             } else {
                 const result = await crearUsuario({
                     email: formData.email,
@@ -62,10 +58,10 @@ export default function LoginPage() {
                         setFormData({ ...formData, password: '' })
                     }, 1500)
                 }
+                setIsLoading(false)
             }
-        } catch (error) {
+        } catch {
             setMessage({ type: 'error', text: 'Error inesperado' })
-        } finally {
             setIsLoading(false)
         }
     }

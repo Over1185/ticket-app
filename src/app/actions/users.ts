@@ -1,6 +1,8 @@
 'use server'
 
 import { z } from 'zod'
+import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { hashPassword, verifyPassword, createSession, getSession, destroySession, SessionUser } from '@/lib/auth/session'
 import { validateRole, validatePrioridad, validateEstadoTicket } from '@/lib/auth/permissions'
 import * as queries from '@/lib/db/queries'
@@ -102,6 +104,9 @@ export async function loginUsuario(datos: unknown) {
         // Cachear usuario
         await cacheUser(usuario.id, usuario)
 
+        // Revalidar todas las rutas para actualizar la sesión
+        revalidatePath('/', 'layout')
+
         return {
             success: true,
             usuario: sessionUser,
@@ -116,6 +121,20 @@ export async function loginUsuario(datos: unknown) {
 }
 
 /**
+ * Autentica un usuario y redirige automáticamente
+ */
+export async function loginAndRedirect(datos: unknown) {
+    const result = await loginUsuario(datos)
+
+    if ('error' in result) {
+        return result
+    }
+
+    // Si el login fue exitoso, redirigir
+    redirect('/tickets')
+}
+
+/**
  * Obtiene la sesión del usuario actual
  */
 export async function getCurrentUser(): Promise<SessionUser | null> {
@@ -127,6 +146,7 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
  */
 export async function logoutUsuario() {
     await destroySession()
+    revalidatePath('/', 'layout')
     return { success: true, mensaje: 'Sesión cerrada exitosamente' }
 }
 

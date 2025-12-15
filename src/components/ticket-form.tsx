@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
 import { crearTicket } from '@/app/actions/tickets'
 
 interface TicketFormProps {
@@ -9,7 +9,7 @@ interface TicketFormProps {
 }
 
 export function TicketForm({ usuarioId, onSuccess }: TicketFormProps) {
-    const [isLoading, setIsLoading] = useState(false)
+    const [isPending, startTransition] = useTransition()
     const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(
         null
     )
@@ -29,32 +29,31 @@ export function TicketForm({ usuarioId, onSuccess }: TicketFormProps) {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
-        setIsLoading(true)
         setMessage(null)
 
-        try {
-            const result = await crearTicket({
-                ...formData,
-                usuarioId,
-            })
-
-            if ('error' in result && result.error) {
-                setMessage({ type: 'error', text: result.error })
-            } else {
-                setMessage({ type: 'success', text: result.mensaje || 'Ticket creado exitosamente' })
-                setFormData({
-                    titulo: '',
-                    descripcion: '',
-                    prioridad: 'media',
-                    categoria: '',
+        startTransition(async () => {
+            try {
+                const result = await crearTicket({
+                    ...formData,
+                    usuarioId,
                 })
-                onSuccess?.()
+
+                if ('error' in result && result.error) {
+                    setMessage({ type: 'error', text: result.error })
+                } else {
+                    setMessage({ type: 'success', text: result.mensaje || 'Ticket creado exitosamente' })
+                    setFormData({
+                        titulo: '',
+                        descripcion: '',
+                        prioridad: 'media',
+                        categoria: '',
+                    })
+                    onSuccess?.()
+                }
+            } catch (error) {
+                setMessage({ type: 'error', text: 'Error al crear el ticket' })
             }
-        } catch (error) {
-            setMessage({ type: 'error', text: 'Error al crear el ticket' })
-        } finally {
-            setIsLoading(false)
-        }
+        })
     }
 
     return (
@@ -131,10 +130,10 @@ export function TicketForm({ usuarioId, onSuccess }: TicketFormProps) {
 
             <button
                 type="submit"
-                disabled={isLoading}
+                disabled={isPending}
                 className="w-full bg-blue-600 text-white font-medium py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition"
             >
-                {isLoading ? 'Creando...' : 'Crear Ticket'}
+                {isPending ? 'Creando...' : 'Crear Ticket'}
             </button>
         </form>
     )
