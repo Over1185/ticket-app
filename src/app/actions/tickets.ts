@@ -1,6 +1,7 @@
 'use server'
 
 import { z } from 'zod'
+import { revalidatePath } from 'next/cache'
 import { validateEstadoTicket, validatePrioridad } from '@/lib/auth/permissions'
 import * as queries from '@/lib/db/queries'
 import { invalidateTicketCache, getCachedTicket, cacheTicket } from '@/lib/redis/cache'
@@ -154,6 +155,10 @@ export async function actualizarTicketConInteraccion(
         // Invalidar caché
         await invalidateTicketCache(ticketId)
 
+        // Revalidar las páginas para que se actualicen en tiempo real
+        revalidatePath('/tickets')
+        revalidatePath(`/tickets/${ticketId}`)
+
         return {
             success: true,
             resultado,
@@ -186,6 +191,10 @@ export async function asignarTicket(
         // Invalidar caché
         await invalidateTicketCache(ticketId)
 
+        // Revalidar las páginas para que se actualicen en tiempo real
+        revalidatePath('/tickets')
+        revalidatePath(`/tickets/${ticketId}`)
+
         return {
             success: true,
             resultado,
@@ -214,6 +223,10 @@ export async function cerrarTicket(
 
         // Invalidar caché
         await invalidateTicketCache(ticketId)
+
+        // Revalidar las páginas para que se actualicen en tiempo real
+        revalidatePath('/tickets')
+        revalidatePath(`/tickets/${ticketId}`)
 
         return {
             success: true,

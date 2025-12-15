@@ -304,7 +304,7 @@ export default function MetricsPage() {
                                 }
 
                                 return (
-                                    <div key={tipo} className="flex justify-between items-center py-2 border-b border-gray-100">
+                                    <div key={tipo} className="flex justify-between items-center py-2 border-b border-gray-500">
                                         <span className="text-gray-600">
                                             {icons[tipo] || '📝'} {tipo.replace('_', ' ')}
                                         </span>

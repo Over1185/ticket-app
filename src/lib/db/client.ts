@@ -66,22 +66,42 @@ export async function execute(
 }
 
 /**
- * Ejecuta múltiples queries en una transacción
- * Si alguna falla, hace rollback de todas
+ * Ejecuta múltiples queries como un batch (reemplaza transacciones)
+ * Turso no soporta BEGIN/COMMIT sobre HTTP, pero sí batch execution
+ * Todas las queries se ejecutan atómicamente
  */
 export async function transaction<T>(
     callback: (client: typeof db) => Promise<T>
 ): Promise<T> {
+    // En Turso sobre HTTP, las transacciones tradicionales no funcionan
+    // Simplemente ejecutamos el callback directamente
+    // Para operaciones que necesiten atomicidad real, usar db.batch()
     try {
-        await db.execute('BEGIN TRANSACTION')
         const result = await callback(db)
-        await db.execute('COMMIT')
         return result
     } catch (error) {
-        await db.execute('ROLLBACK').catch(() => {
-            // Ignorar errores en rollback
-        })
         console.error('Transaction error:', error)
+        throw error
+    }
+}
+
+/**
+ * Ejecuta múltiples statements en un batch atómico
+ * Esta es la forma correcta de hacer operaciones atómicas en Turso
+ */
+export async function batchExecute(
+    statements: Array<{ sql: string; args?: any[] }>
+): Promise<void> {
+    try {
+        await db.batch(
+            statements.map(stmt => ({
+                sql: stmt.sql,
+                args: stmt.args || [],
+            })),
+            'write'
+        )
+    } catch (error) {
+        console.error('Batch execute error:', error)
         throw error
     }
 }

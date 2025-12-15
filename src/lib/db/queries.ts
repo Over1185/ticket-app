@@ -1,4 +1,4 @@
-import { query, queryOne, execute, transaction } from './client'
+import { query, queryOne, execute, transaction, batchExecute, db } from './client'
 import { Role, EstadoTicket, Prioridad, TipoInteraccion } from '@/lib/auth/permissions'
 
 // ===== TIPOS =====
@@ -269,46 +269,44 @@ export async function actualizarTicketConInteraccion(
     comentario?: string,
     metadata?: Record<string, any>
 ): Promise<{ ticketId: number; interaccionId: number }> {
-    return await transaction(async (client) => {
-        // Obtener estado anterior
-        const ticketActual = await queryOne<{ estado: string }>(
-            'SELECT estado FROM tickets WHERE id = ?',
-            [ticketId]
-        )
-        const estadoAnterior = ticketActual?.estado || 'desconocido'
+    // Obtener estado anterior primero
+    const ticketActual = await queryOne<{ estado: string }>(
+        'SELECT estado FROM tickets WHERE id = ?',
+        [ticketId]
+    )
+    const estadoAnterior = ticketActual?.estado || 'desconocido'
 
-        // Actualizar ticket
-        await execute(
-            `UPDATE tickets 
-       SET estado = ?, fecha_actualizacion = CURRENT_TIMESTAMP 
-       WHERE id = ?`,
-            [nuevoEstado, ticketId]
-        )
+    // Combinar metadata con información del cambio de estado
+    const metadataCompleto = {
+        ...metadata,
+        estado_anterior: estadoAnterior,
+        estado_nuevo: nuevoEstado,
+    }
 
-        // Combinar metadata con información del cambio de estado
-        const metadataCompleto = {
-            ...metadata,
-            estado_anterior: estadoAnterior,
-            estado_nuevo: nuevoEstado,
-        }
-
-        // Registrar interacción
-        const interaccionResult = await execute(
-            `INSERT INTO interacciones (ticket_id, usuario_id, tipo, contenido, metadata)
-       VALUES (?, ?, 'cambio_estado', ?, ?)`,
-            [
+    // Ejecutar batch atómico con ambas operaciones
+    const results = await db.batch([
+        {
+            sql: `UPDATE tickets 
+                  SET estado = ?, fecha_actualizacion = CURRENT_TIMESTAMP 
+                  WHERE id = ?`,
+            args: [nuevoEstado, ticketId],
+        },
+        {
+            sql: `INSERT INTO interacciones (ticket_id, usuario_id, tipo, contenido, metadata)
+                  VALUES (?, ?, 'cambio_estado', ?, ?)`,
+            args: [
                 ticketId,
                 usuarioId,
                 comentario || null,
                 JSON.stringify(metadataCompleto),
-            ]
-        )
+            ],
+        },
+    ], 'write')
 
-        return {
-            ticketId,
-            interaccionId: Number(interaccionResult.lastInsertRowid),
-        }
-    })
+    return {
+        ticketId,
+        interaccionId: Number(results[1].lastInsertRowid || 0),
+    }
 }
 
 /**
@@ -319,34 +317,32 @@ export async function asignarTicketConInteraccion(
     operadorId: number,
     usuarioQuienAsigna: number
 ): Promise<{ ticketId: number; interaccionId: number }> {
-    return await transaction(async (client) => {
-        // Actualizar ticket
-        await execute(
-            `UPDATE tickets 
-       SET asignado_a = ?, fecha_actualizacion = CURRENT_TIMESTAMP 
-       WHERE id = ?`,
-            [operadorId, ticketId]
-        )
-
-        // Registrar interacción
-        const interaccionResult = await execute(
-            `INSERT INTO interacciones (ticket_id, usuario_id, tipo, metadata)
-       VALUES (?, ?, 'asignacion', ?)`,
-            [
+    // Ejecutar batch atómico con ambas operaciones
+    const results = await db.batch([
+        {
+            sql: `UPDATE tickets 
+                  SET asignado_a = ?, fecha_actualizacion = CURRENT_TIMESTAMP 
+                  WHERE id = ?`,
+            args: [operadorId, ticketId],
+        },
+        {
+            sql: `INSERT INTO interacciones (ticket_id, usuario_id, tipo, metadata)
+                  VALUES (?, ?, 'asignacion', ?)`,
+            args: [
                 ticketId,
                 usuarioQuienAsigna,
                 JSON.stringify({
                     asignado_a: operadorId,
                     anterior_asignado_a: null,
                 }),
-            ]
-        )
+            ],
+        },
+    ], 'write')
 
-        return {
-            ticketId,
-            interaccionId: Number(interaccionResult.lastInsertRowid),
-        }
-    })
+    return {
+        ticketId,
+        interaccionId: Number(results[1].lastInsertRowid || 0),
+    }
 }
 
 /**
@@ -357,25 +353,23 @@ export async function cerrarTicketConInteraccion(
     usuarioId: number,
     comentario?: string
 ): Promise<{ ticketId: number; interaccionId: number }> {
-    return await transaction(async (client) => {
-        // Actualizar ticket
-        await execute(
-            `UPDATE tickets 
-       SET estado = 'cerrado', fecha_cierre = CURRENT_TIMESTAMP, fecha_actualizacion = CURRENT_TIMESTAMP
-       WHERE id = ?`,
-            [ticketId]
-        )
+    // Ejecutar batch atómico con ambas operaciones
+    const results = await db.batch([
+        {
+            sql: `UPDATE tickets 
+                  SET estado = 'cerrado', fecha_cierre = CURRENT_TIMESTAMP, fecha_actualizacion = CURRENT_TIMESTAMP
+                  WHERE id = ?`,
+            args: [ticketId],
+        },
+        {
+            sql: `INSERT INTO interacciones (ticket_id, usuario_id, tipo, contenido)
+                  VALUES (?, ?, 'cierre', ?)`,
+            args: [ticketId, usuarioId, comentario || null],
+        },
+    ], 'write')
 
-        // Registrar interacción
-        const interaccionResult = await execute(
-            `INSERT INTO interacciones (ticket_id, usuario_id, tipo, contenido)
-       VALUES (?, ?, 'cierre', ?)`,
-            [ticketId, usuarioId, comentario || null]
-        )
-
-        return {
-            ticketId,
-            interaccionId: Number(interaccionResult.lastInsertRowid),
-        }
-    })
+    return {
+        ticketId,
+        interaccionId: Number(results[1].lastInsertRowid || 0),
+    }
 }
