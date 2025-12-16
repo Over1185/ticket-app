@@ -307,20 +307,6 @@ export async function warmupCache() {
 | Crear comentario | 150ms (BD) | 100ms (BD + queue) | Asincrón |
 | Peak load (1000 req/s) | Turso abrumado | Distribuido | **Escalable** |
 
-## Configuración de Upstash
-
-```env
-# .env
-UPSTASH_REDIS_REST_URL=https://meet-lionfish-18721.upstash.io
-UPSTASH_REDIS_REST_TOKEN=AUkhAAIncDE1NjAxNzY1Nzc2ZDA0MWI5YmZkOWZmOGJhZDBiZDFlOXAxMTg3MjE
-
-# Crear conexión
-export const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL!,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-})
-```
-
 ## Próximos Pasos
 
 1. **Sentinel/Replication:** Alta disponibilidad
