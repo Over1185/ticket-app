@@ -312,15 +312,12 @@ await benchmarkOperacion('Obtener usuario', () =>
 └─────────────────────────────────────────────────┘
 ```
 
-## Checklist de Monitoreo
+## Próximos Pasos de Optimización
 
-- [x] Endpoint `/api/metrics` implementado
-- [x] Conteos de tablas disponibles
-- [x] Información de Redis disponible
-- [ ] Dashboard Grafana configurado
-- [ ] Alertas configuradas
-- [ ] Logs centralizados
-- [ ] APM (Application Performance Monitoring)
-- [ ] Tracing distribuido
-- [ ] Alertas en PagerDuty/Slack
-- [ ] SLO/SLI definidos
+1. Dashboard Grafana configurado
+2. Alertas configuradas
+3. Logs centralizados
+4. APM (Application Performance Monitoring)
+5. Tracing distribuido
+6. Alertas en PagerDuty/Slack
+7. SLO/SLI definidos

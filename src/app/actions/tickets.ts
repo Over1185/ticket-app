@@ -6,7 +6,6 @@ import { validateEstadoTicket, validatePrioridad, hasPermission, Role } from '@/
 import { getSession } from '@/lib/auth/session'
 import * as queries from '@/lib/db/queries'
 import { invalidateTicketCache, getCachedTicket, cacheTicket, invalidateUserTicketsCache } from '@/lib/redis/cache'
-import { enqueueTask } from '@/lib/redis/queue'
 import { redis } from '@/lib/redis/client'
 import type { Ticket } from '@/lib/db/queries'
 

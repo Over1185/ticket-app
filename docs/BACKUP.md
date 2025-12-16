@@ -344,16 +344,11 @@ turso db restore tickets-db-over1185 \
 | Disponibilidad | 99.9% | Múltiples regiones |
 | Verificación | Semanal | Script automático |
 
-## Checklist de Backup
+## Próximos Pasos de Optimización
 
-- [x] Backups automáticos configurados en Turso
-- [x] Procedimiento de restauración documentado
-- [x] Tareas de mantenimiento programadas
-- [x] Verificación de integridad semanal
-- [x] Logs transaccionales guardados
-- [ ] Backups replicados a múltiples regiones
-- [ ] Cifrado de backups en tránsito y en reposo
-- [ ] Testing regular de recuperación (disaster drills)
-- [ ] Documentación de runbooks
-- [ ] Alertas en fallos de backup
-- [ ] Métricas de backup en dashboard
+1.  Backups replicados a múltiples regiones
+2.  Cifrado de backups en tránsito y en reposo
+3.  Testing regular de recuperación (disaster drills)
+4.  Documentación de runbooks
+5.  Alertas en fallos de backup
+6.  Métricas de backup en dashboard

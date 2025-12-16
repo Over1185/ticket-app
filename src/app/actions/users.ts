@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { hashPassword, verifyPassword, createSession, getSession, destroySession, SessionUser } from '@/lib/auth/session'
-import { validateRole, validatePrioridad, validateEstadoTicket } from '@/lib/auth/permissions'
+import { validateRole } from '@/lib/auth/permissions'
 import * as queries from '@/lib/db/queries'
 import { cacheUser, invalidateUserCache, getCachedUser } from '@/lib/redis/cache'
 

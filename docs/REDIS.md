@@ -328,15 +328,3 @@ export const redis = new Redis({
 3. **Lua Scripts:** Operaciones atómicas complejas
 4. **Streams:** Event sourcing
 5. **Cluster:** Escalado horizontal
-
-## Checklist
-
-- [x] Cache-aside pattern implementado
-- [x] TTL configurado (5 minutos)
-- [x] Invalidación en updates
-- [x] Cola de tareas funcional
-- [x] Métricas en endpoint
-- [ ] Cache warming en startup
-- [ ] Monitoreo de hit rate
-- [ ] Alertas en memory pressure
-- [ ] Batch worker en cron/scheduler

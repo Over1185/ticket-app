@@ -280,19 +280,13 @@ Ejemplo de auditoría:
 2024-12-14 10:31:15 | usuario=4 | acción=delete_user | recurso=usuarios | id=1 | resultado=denegado (sin permiso)
 ```
 
-## Checklist de Seguridad
+## Próximos Pasos de Optimización
 
-- [x] Validación de inputs con Zod
-- [x] Prepared statements en BD
-- [x] Hash de contraseñas con bcryptjs
-- [x] Sistema de roles y permisos
-- [x] Información no sensible en respuestas
-- [x] Errores genéricos para autenticación
-- [ ] JWT o NextAuth para tokens persistentes
-- [ ] Rate limiting en endpoints
-- [ ] Logs de auditoría
-- [ ] HTTPS/TLS obligatorio
-- [ ] CORS configurado
-- [ ] CSRF tokens en forms
-- [ ] XSS protection
-- [ ] SQL injection prevention (ya implementado)
+1. JWT o NextAuth para tokens persistentes
+2. Rate limiting en endpoints
+3. Logs de auditoría
+4. HTTPS/TLS obligatorio
+5. CORS configurado
+6. CSRF tokens en forms
+7. XSS protection
+8. SQL injection prevention (ya implementado)

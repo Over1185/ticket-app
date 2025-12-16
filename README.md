@@ -1,36 +1,54 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Ticket App 🚀
 
-## Getting Started
+**Sistema de gestión de tickets** construido con **Next.js** y pensado para demostraciones y pruebas (Turso + Redis en la arquitectura). Puedes ver la versión desplegada aquí:
 
-First, run the development server:
+🔗 <https://ticket-app-jade-ten.vercel.app/>
+
+---
+
+## 🔎 ¿Qué incluye este repositorio?
+
+- Código de la aplicación (Frontend + Server Actions) en `src/app`
+- Conexiones y utilidades en `src/lib` (DB, Redis, auth, etc.)
+- Scripts útiles en `scripts/` (por ejemplo: `db-setup.js`)
+- Documentación técnica en el directorio `docs/` — ver detalles abajo
+
+---
+
+## 📚 Documentación
+
+Toda la documentación del proyecto está en la carpeta `docs/`. Aquí las más relevantes:
+
+- [**ARCHITECTURE.md**](https://github.com/Over1185/ticket-app/blob/main/docs/ARCHITECTURE.md) — Arquitectura general y componentes (Turso, Redis, Next.js)
+- [**BACKUP.md**](https://github.com/Over1185/ticket-app/blob/main/docs/BACKUP.md) — Estrategia de backups y procedimientos de restauración
+- [**CONCURRENCY.md**](https://github.com/Over1185/ticket-app/blob/main/docs/CONCURRENCY.md) — Políticas y patrones de concurrencia / transacciones
+- [**METRICS.md**](https://github.com/Over1185/ticket-app/blob/main/docs/METRICS.md) — Métricas, monitoreo y endpoints disponibles
+- [**REDIS.md**](https://github.com/Over1185/ticket-app/blob/main/docs/REDIS.md) — Estrategia de caché y sistema de colas
+- [**SECURITY.md**](https://github.com/Over1185/ticket-app/blob/main/docs/SECURITY.md) — Roles, permisos y buenas prácticas de seguridad
+
+---
+
+## ⚙️ Requisitos y puesta en marcha
+
+Requisitos recomendados:
+
+- Node.js >= 18
+- pnpm (o npm/yarn)
+- Variables de entorno para la BD y Redis (revisa `src/lib/redis` y `src/lib/db`)
+
+Comandos básicos:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+# Instalar dependencias
+pnpm install
+
+# Levantar en modo desarrollo
 pnpm dev
-# or
-bun dev
+
+# Build para producción
+pnpm build
+pnpm start
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Para inicializar la base de datos localmente revisa `scripts/db-setup.js` y la carpeta `db/`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.

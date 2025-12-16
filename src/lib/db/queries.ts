@@ -1,4 +1,4 @@
-import { query, queryOne, execute, transaction, batchExecute, db } from './client'
+import { query, queryOne, execute, db } from './client'
 import { Role, EstadoTicket, Prioridad, TipoInteraccion } from '@/lib/auth/permissions'
 
 // ===== TIPOS =====

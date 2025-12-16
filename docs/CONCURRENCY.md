@@ -296,12 +296,7 @@ describe('Concurrencia de Tickets', () => {
 
 **Regla de oro:** Usa transacciones para operaciones que deben ser consistentes juntas.
 
-## Código Checklist
+## Próximos Pasos de Optimización
 
-- [x] Transacciones en operaciones múltiples (cambio estado + interacción)
-- [x] Validación de inputs antes de transacción
-- [x] Rollback automático en errores
-- [x] Cachés invalidados después de transacción
-- [x] Logs de errores para debugging
-- [ ] Monitoreo de duración de transacciones
-- [ ] Alertas si transacciones toman > 1 segundo
+1. Monitoreo de duración de transacciones
+2. Alertas si transacciones toman > 1 segundo
